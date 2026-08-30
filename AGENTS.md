@@ -15,7 +15,6 @@ This template implements the **Weekly Update → PR with CI Gate → Rebase & Me
 cp actions/templates/ci.yml .github/workflows/ci.yml
 cp actions/templates/weekly-update.yml .github/workflows/weekly-update.yml
 cp actions/templates/release.yml .github/workflows/release.yml
-cp actions/templates/renovate.json renovate.json  # if Vue/TS project
 
 # Ensure .github/workflows exists
 mkdir -p .github/workflows
@@ -46,7 +45,6 @@ Also:
 ```bash
 python3 -c "import yaml, pathlib; [yaml.safe_load(open(f)) for f in ['.github/workflows/ci.yml', '.github/workflows/weekly-update.yml', '.github/workflows/release.yml']]; print('yaml valid')"
 python3 -m json.tool frontend/package.json > /dev/null && echo "json valid"
-python3 -m json.tool renovate.json > /dev/null && echo "renovate valid"
 ```
 
 ## 4. Setup Branch Protection
@@ -80,7 +78,7 @@ gh api repos/Delnegend/<repo> -X PATCH -f allow_rebase_merge=true -f allow_squas
 ## 5. Commit & Push
 
 ```bash
-git add .github/workflows/ci.yml .github/workflows/weekly-update.yml .github/workflows/release.yml renovate.json frontend/package.json
+git add .github/workflows/ci.yml .github/workflows/weekly-update.yml .github/workflows/release.yml frontend/package.json
 git commit -m "ci: add weekly→PR→CI→release flow from actions template
 
 - full-matrix PR checks (linux/darwin/windows) on pull_request to main

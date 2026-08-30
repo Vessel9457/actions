@@ -28,13 +28,4 @@ for f in ci.yml weekly-update.yml release.yml; do
   fi
 done
 
-if [[ -f "$TEMPLATE_DIR/renovate.json" ]]; then
-  if [[ -f "$TARGET/renovate.json" ]]; then
-    echo "Skipping renovate.json — already exists"
-  else
-    cp "$TEMPLATE_DIR/renovate.json" "$TARGET/renovate.json"
-    echo "Copied renovate.json"
-  fi
-fi
-
 echo "Done. Next: customize BINARY_NAME in ci.yml/release.yml and run setup-branch-protection.sh"

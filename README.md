@@ -27,7 +27,6 @@ flowchart TD
 ```bash
 # 1. Copy templates to your repo
 cp -r templates/.github ./
-cp renovate.json ./           # optional, keep TS hold if using Vue
 cp scripts/setup-branch-protection.sh ./scripts/
 
 # 2. Customize
@@ -51,7 +50,6 @@ git push
 | `templates/ci.yml` | Full-matrix checks + `just check` | `pull_request` to `main`, `push` to `main` |
 | `templates/weekly-update.yml` | Weekly dep bump with 2-week min-age + TS6 hold | `schedule` Mon 02:00 UTC, `workflow_dispatch` |
 | `templates/release.yml` | Cross-platform build + auto patch release | `pull_request:closed` to `main`, `workflow_dispatch` |
-| `templates/renovate.json` | Caps `typescript` <7 until `vue-tsc` supports TS7.1 | Renovate |
 | `templates/package.json.overrides` | Bun `overrides` + comment for TS hold | Bun |
 
 See `docs/FLOW.md` for detailed behavior and `AGENTS.md` for AI agent instructions.

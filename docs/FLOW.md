@@ -39,7 +39,7 @@ weekly-update.yml ──always──► PR chore/update-deps (label: dependencie
 
 1. **Update Go deps** — `go list -m -u all`, then for each `latest` fetch `proxy.golang.org/@v/*.info` `Time`, compare to cutoff (now - 14d), only `go get` those older than cutoff. `go mod tidy`.
 
-2. **Update frontend** — `cd frontend && bun update --latest --minimum-release-age $BUN_MIN_RELEASE_AGE`. Then **verify TS hold**: `grep '"typescript": "npm:@typescript/typescript6'` must pass; if not, `exit 1` (fails updater, but `Draft PR`/`Open PR` use `if: always()` so PR still opens — the hold is enforced via `overrides` + `renovate.json` anyway).
+2. **Update frontend** — `cd frontend && bun update --latest --minimum-release-age $BUN_MIN_RELEASE_AGE`. Then **verify TS hold**: `grep '"typescript": "npm:@typescript/typescript6'` must pass; if not, `exit 1` (fails updater, but `Draft PR`/`Open PR` use `if: always()` so PR still opens — the hold is enforced via `overrides` anyway).
 
 3. **Check for changes** — `git status --porcelain` → `changed=true`.
 
@@ -116,4 +116,4 @@ Effect: PR cannot be merged unless all 4 checks pass and branch is up-to-date; o
 
 ## History
 
-Extracted from `gallery-preprocessor` after fixing TS7 breakage (vue-tsc requires TS6 until 7.1, side-by-side `typescript: npm:@typescript/typescript6@6.0.2` + `@typescript/native: npm:typescript@7.0.2`, `overrides`, `renovate.json` hold).
+Extracted from `gallery-preprocessor` after fixing TS7 breakage (vue-tsc requires TS6 until 7.1, side-by-side `typescript: npm:@typescript/typescript6@6.0.2` + `@typescript/native: npm:typescript@7.0.2`, `overrides` hold).

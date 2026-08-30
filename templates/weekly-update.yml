@@ -94,7 +94,7 @@ jobs:
           # Frontend dependencies with minimum release age (2 weeks)
           # Hold: typescript is aliased to TS6 for vue-tsc until TS 7.1 ships stable API
           # (vuejs/language-tools#6124, https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/#typescript-and-embedded-languages)
-          # Overrides in frontend/package.json + renovate.json cap it at <7; verify after update.
+          # Overrides in frontend/package.json cap it at <7; verify after update.
           cd frontend
           bun update --latest --minimum-release-age ${{ env.BUN_MIN_RELEASE_AGE }}
 
@@ -102,9 +102,9 @@ jobs:
           if ! grep -q '"typescript": "npm:@typescript/typescript6' package.json; then
             echo "::warning::typescript hold violated — package.json no longer aliased to TS6 after bun update. Restoring..."
             echo "Current: $(grep '"typescript"' package.json)"
-            echo "This should have been capped by overrides (package.json:overrides) and renovate.json."
+            echo "This should have been capped by overrides (package.json:overrides)."
             echo "For safety, workflow will fail here to avoid opening a broken PR."
-            echo "Fix: ensure overrides and renovate rule are intact, or re-pin to npm:@typescript/typescript6@6.0.2"
+            echo "Fix: ensure overrides are intact, or re-pin to npm:@typescript/typescript6@6.0.2"
             exit 1
           fi
           echo "Hold OK: $(grep '"typescript"' package.json | head -1)"
