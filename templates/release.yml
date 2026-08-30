@@ -1,0 +1,231 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: Release version (e.g. 0.1.0)
+        required: true
+        type: string
+        default: 0.1.0
+      create_release:
+        description: Push to GitHub Releases
+        required: true
+        type: boolean
+        default: false
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+env:
+  BINARY_NAME: gallery-preprocessor
+
+jobs:
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.merged == true &&
+       (contains(github.event.pull_request.labels.*.name, 'dependencies') || github.event.pull_request.head.ref == 'chore/update-deps'))
+    outputs:
+      release_version: ${{ steps.version.outputs.version }}
+      create_release: ${{ steps.version.outputs.create_release }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ inputs.release_version }}" >> "$GITHUB_OUTPUT"
+            echo "create_release=${{ inputs.create_release }}" >> "$GITHUB_OUTPUT"
+          else
+            # Calculate next patch version from latest tag
+            LATEST_TAG="$(git describe --tags --abbrev=0 2>/dev/null || echo 'v0.0.0')"
+            PLAIN_VERSION="${LATEST_TAG#v}"
+            IFS='.' read -r major minor patch <<< "$PLAIN_VERSION"
+            major="${major:-0}"
+            minor="${minor:-1}"
+            patch="${patch:-0}"
+            if [ "$LATEST_TAG" = "v0.0.0" ]; then
+              NEXT_VERSION="0.1.0"
+            else
+              NEXT_PATCH=$((patch + 1))
+              NEXT_VERSION="${major}.${minor}.${NEXT_PATCH}"
+            fi
+            echo "Latest tag: $LATEST_TAG, computed next patch version: $NEXT_VERSION"
+            echo "version=$NEXT_VERSION" >> "$GITHUB_OUTPUT"
+            echo "create_release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Build (${{ matrix.platform }})
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            platform: linux/amd64
+          - os: macos-latest
+            goos: darwin
+            goarch: universal
+            platform: darwin/universal
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            platform: windows/amd64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Linux dependencies
+        if: matrix.goos == 'linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            build-essential libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
+
+      - name: Install NSIS (Windows)
+        if: matrix.goos == 'windows'
+        run: choco install nsis -y
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Build Wails App (Linux)
+        if: matrix.goos == 'linux'
+        run: |
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          wails build -platform ${{ matrix.platform }} -clean -tags webkit2_41
+
+      - name: Build Wails App (macOS)
+        if: matrix.goos == 'darwin'
+        run: |
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          wails build -platform ${{ matrix.platform }} -clean
+
+      - name: Build Wails App (Windows)
+        if: matrix.goos == 'windows'
+        shell: bash
+        run: |
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          wails build -platform ${{ matrix.platform }} -nsis -clean
+
+      - name: Compress binaries
+        shell: bash
+        run: |
+          base="${{ env.BINARY_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}"
+          mkdir -p "$base"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            cp build/bin/${{ env.BINARY_NAME }}.exe "$base/"
+            cp build/bin/*-installer.exe "$base/" 2>/dev/null || true
+            7z a -t7z "${base}.7z" "$base"
+          elif [ "${{ matrix.goos }}" = "darwin" ]; then
+            cp -R "build/bin/${{ env.BINARY_NAME }}.app" "$base/"
+            tar -cJf "${base}.tar.xz" "$base"
+          else
+            cp "build/bin/${{ env.BINARY_NAME }}" "$base/"
+            tar -cJf "${base}.tar.xz" "$base"
+          fi
+          rm -rf "$base"
+          ls -lh "${base}."*
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.BINARY_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.BINARY_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}*
+
+  release:
+    name: Release
+    needs: [prepare, build]
+    if: needs.prepare.outputs.create_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.prepare.outputs.release_version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Generate release notes from commits since the last tag
+        id: notes
+        run: |
+          PREV="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+          if [ -n "$PREV" ]; then
+            RANGE="$PREV..HEAD"
+            COMPARE="https://github.com/${GITHUB_REPOSITORY}/compare/${PREV}...v${VERSION}"
+          else
+            RANGE="$(git rev-list --max-parents=0 HEAD | tail -1)..HEAD"
+            COMPARE=""
+          fi
+          echo "Generating notes for range $RANGE"
+          TMP="$(mktemp -d)"
+          git log --pretty=format:"%s" "$RANGE" > "$TMP/all"
+          {
+            echo "## What's Changed"
+            echo
+            for spec in "feat **Features**" "fix **Bug Fixes**" "docs **Documentation**" "ci **CI & Workflows**" "test **Tests**" "refactor **Refactoring**" "perf **Performance**" "chore **Chores**"; do
+              type="${spec%% *}"
+              grep -E "^${type}(\([^)]*\))?: " "$TMP/all" > "$TMP/items" || continue
+              echo "${spec#* }"
+              sed -E "s/^${type}(\([^)]*\))?: +/  - /" "$TMP/items"
+              echo
+            done
+            grep -Ev "^[a-z]+(\([^)]*\))?: " "$TMP/all" > "$TMP/other" || true
+            if [ -s "$TMP/other" ]; then
+              echo "**Other**"
+              sed 's/^/  - /' "$TMP/other"
+              echo
+            fi
+            echo "**Downloads**"
+            echo "- **Windows**: \`.7z\` archive (includes standalone executable and installer)"
+            echo "- **Linux / macOS**: \`.tar.xz\` archive (extract with \`tar -xJf\`)"
+            if [ -n "$COMPARE" ]; then
+              echo
+              echo "**Full Changelog**: $COMPARE"
+            fi
+          } > notes.md
+          echo "=== draft release notes ==="
+          cat notes.md
+          echo "notes=$PWD/notes.md" >> "$GITHUB_OUTPUT"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ needs.prepare.outputs.release_version }}
+          name: v${{ needs.prepare.outputs.release_version }}
+          body_path: ${{ steps.notes.outputs.notes }}
+          draft: false
+          prerelease: false
+          files: |
+            artifacts/**/*
