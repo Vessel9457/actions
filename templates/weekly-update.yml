@@ -32,6 +32,9 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 
+      - name: Setup just
+        uses: extractions/setup-just@v3
+
       - name: Update dependencies
         run: |
           # Go dependencies with minimum release age (2 weeks)
