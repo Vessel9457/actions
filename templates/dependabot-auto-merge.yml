@@ -27,7 +27,7 @@ jobs:
 
       - name: Enable auto-merge for patch and minor
         if: steps.meta.outputs.update-type != 'version-update:semver-major'
-        run: gh pr merge --auto --squash "$PR_URL"
+        run: gh pr merge --auto --rebase "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -43,7 +43,7 @@ jobs:
             PR="${{ inputs.pr-number }}"
             echo "Testing PR #$PR"
             gh pr view "$PR" --repo "${{ github.repository }}" --json number,title,author,labels,headRefName | jq .
-            gh pr merge --auto --squash "$PR" --repo "${{ github.repository }}" && echo "Enabled auto-merge for #$PR" || echo "Failed (maybe not dependabot, not patch/minor, or CI not green)"
+            gh pr merge --auto --rebase "$PR" --repo "${{ github.repository }}" && echo "Enabled auto-merge for #$PR" || echo "Failed (maybe not dependabot, not patch/minor, or CI not green)"
           else
             echo "Auto-detecting open dependabot PRs..."
             gh pr list --repo "${{ github.repository }}" --state open --author "dependabot[bot]" --json number,title,headRefName,labels | jq .
@@ -56,7 +56,7 @@ jobs:
             fi
             for pr in $(gh pr list --repo "${{ github.repository }}" --state open --author "dependabot[bot]" --json number --jq '.[].number'); do
               echo "Enabling auto-merge for PR #$pr"
-              gh pr merge --auto --squash "$pr" --repo "${{ github.repository }}" && echo "Enabled for #$pr" || echo "Failed for #$pr (maybe major or CI red)"
+              gh pr merge --auto --rebase "$pr" --repo "${{ github.repository }}" && echo "Enabled for #$pr" || echo "Failed for #$pr (maybe major or CI red)"
             done
           fi
         env:
