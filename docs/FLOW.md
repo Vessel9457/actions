@@ -35,26 +35,25 @@ weekly-update.yml ──always──► PR chore/update-deps (label: dependencie
 
 **Env:** `BUN_MIN_RELEASE_AGE=1209600` (14d), `GO_MIN_RELEASE_AGE=1209600` (14d). 2-week min-age prevents bumping to a 3-day-old breaking release (e.g., `typescript@7.0.2` broke `vue-tsc`).
 
+**Repo-level + Action-level dual enforcement:**
+- **Bun**: `frontend/bunfig.toml:1` `[install] minimumReleaseAge = 1209600` enforces at repo level for every `bun install`/`bun update`/`bun add` (dev, `ci.yml`, `release.yml`). `weekly-update.yml:1` flag `bun update --latest --minimum-release-age $BUN_MIN_RELEASE_AGE` overrides where needed but now redundant — defense-in-depth so local `bun add` can't bypass 14d CI.
+- **Go**: No official repo-level `go.mod` min-age, so only action-level via composite `Delnegend/actions/go-min-age@v1` (hoisted from `weekly-update.yml` bash). Skip Go repo-level.
+
 **Steps:**
 
-1. **Update Go deps** — `go list -m -u all`, then for each `latest` fetch `proxy.golang.org/@v/*.info` `Time`, compare to cutoff (now - 14d), only `go get` those older than cutoff. `go mod tidy`.
+1. **Update Go deps** — `uses: Delnegend/actions/go-min-age@v1` with `min-age: 1209600` (composite: `go list -m -u all`, fetch `proxy.golang.org/@v/*.info` `Time`, filter by cutoff, `go get -d` per-module, `go mod tidy`).
 
 2. **Update frontend** — `cd frontend && bun update --latest --minimum-release-age $BUN_MIN_RELEASE_AGE`. Then **verify TS hold**: `grep '"typescript": "npm:@typescript/typescript6'` must pass; if not, `exit 1` (fails updater, but `Draft PR`/`Open PR` use `if: always()` so PR still opens — the hold is enforced via `overrides` anyway).
 
 3. **Check for changes** — `git status --porcelain` → `changed=true`.
 
-4. **Local gates** (`continue-on-error: true`, don't block PR):
-   - `Build frontend`: `bun install && bun run build` (`vue-tsc -b && vite build`)
-   - `Validate Go build`: `go vet && gofmt -l && go build -tags webkit2_41`
-   - `Build gate — just check`: `just check` (or `go vet + oxlint + prettier --check`)
+   *No local build validation here* — `ci.yml` full-matrix is the single merge gate (removed `Install system dependencies`/`Build frontend`/`Validate Go build`/`Build gate` that previously ran `continue-on-error`).
 
-   These are early feedback; `ci.yml` is the merge gate.
+4. **Draft PR body** — `git diff -- go.mod` + `frontend/package.json` → `## Dependency changes`.
 
-5. **Draft PR body** — `git diff -- go.mod` + `frontend/package.json` → `## Dependency changes`.
+5. **Open PR** — `peter-evans/create-pull-request@v8` with `if: always() && changed`, `branch: chore/update-deps`, `labels: dependencies`, `delete-branch: true`. Always creates/updates PR; CI will gate merge. Note: PRs created with `GITHUB_TOKEN` show `action_required` for `ci.yml` `pull_request` — click **Approve and run** (keep `GITHUB_TOKEN`; PAT `secrets.PAT` would auto-run but not needed for weekly cadence).
 
-6. **Open PR** — `peter-evans/create-pull-request@v8` with `if: always() && changed`, `branch: chore/update-deps`, `labels: dependencies`, `delete-branch: true`. Always creates/updates PR even if local gates errored.
-
-**Why `continue-on-error` + `always()`?** To satisfy “always PR” — a broken local build should still surface as a PR with red CI, not as a silent failed workflow run.
+**Why `if: always()`?** To satisfy “always PR” — even if updater fails, PR still opens and surfaces via CI, not as silent failed run. `continue-on-error` local gates were removed because `ci.yml` is now the single gate.
 
 ## ci.yml
 

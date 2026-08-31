@@ -17,7 +17,8 @@ flowchart TD
     D --> F[Release<br/>release.yml<br/>patch bump + artifacts]
 ```
 
-* **Weekly Update** always opens/updates a PR (`chore/update-deps`, label `dependencies`), even if local `bun run build` fails. Local gates in `weekly-update.yml` are `continue-on-error` — the PR's `ci.yml` is the source of truth.
+* **Weekly Update** always opens/updates a PR (`chore/update-deps`, label `dependencies`) after `Delnegend/actions/go-min-age@v1` (Go `proxy.golang.org` 14d filter, `go get -d` per-module) + `bun update --minimum-release-age` (14d). No local build validation — `ci.yml` is the single gate (saves minutes, avoids duplication).
+* **Repo-level min-age**: `frontend/bunfig.toml:1` `[install] minimumReleaseAge = 1209600` (14d) enforces on every `bun install`/`add` locally and in CI; Go has no official repo-level, so only action-level via composite.
 * **CI** runs full matrix (`linux/amd64`, `darwin/universal`, `windows/amd64`) + `just check` on every PR to `main`. Weekly is cheap, so full matrix is acceptable.
 * **Branch protection** on `main` requires 4 checks + linear history. Only `Rebase and merge` is allowed.
 * **Release** runs only on `pull_request:closed` to `main` with `dependencies` label or `chore/update-deps` head — auto patch bump (`v0.0.0` → `v0.1.0` → `v0.1.1` …) and `softprops/action-gh-release`.
@@ -48,9 +49,11 @@ git push
 | File | Purpose | Trigger |
 |------|---------|---------|
 | `templates/ci.yml` | Full-matrix checks + `just check` | `pull_request` to `main`, `push` to `main` |
-| `templates/weekly-update.yml` | Weekly dep bump with 2-week min-age + TS6 hold | `schedule` Mon 02:00 UTC, `workflow_dispatch` |
+| `templates/weekly-update.yml` | Weekly dep bump via `go-min-age` composite + `bun` 2-week min-age + TS6 hold | `schedule` Mon 02:00 UTC, `workflow_dispatch` |
 | `templates/release.yml` | Cross-platform build + auto patch release | `pull_request:closed` to `main`, `workflow_dispatch` |
 | `templates/package.json.overrides` | Bun `overrides` + comment for TS hold | Bun |
+| `templates/frontend/bunfig.toml` | Repo-level `minimumReleaseAge = 1209600` (14d) | `bun install`/`update` |
+| `go-min-age/action.yml` | Composite for Go `proxy.golang.org` 14d filter (`go get -d` per-module) | `uses: Delnegend/actions/go-min-age@v1` |
 
 See `docs/FLOW.md` for detailed behavior and `AGENTS.md` for AI agent instructions.
 

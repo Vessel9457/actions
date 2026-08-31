@@ -28,4 +28,18 @@ for f in ci.yml weekly-update.yml release.yml; do
   fi
 done
 
+# Bun min-age repo-level (frontend/bunfig.toml)
+if [[ -f "$TEMPLATE_DIR/frontend/bunfig.toml" ]]; then
+  if [[ -f "$TARGET/frontend/bunfig.toml" ]]; then
+    echo "Skipping frontend/bunfig.toml — already exists"
+  else
+    mkdir -p "$TARGET/frontend"
+    cp "$TEMPLATE_DIR/frontend/bunfig.toml" "$TARGET/frontend/bunfig.toml"
+    echo "Copied frontend/bunfig.toml (repo-level min-age 14d)"
+  fi
+fi
+
+# Go min-age composite is used remotely (Delnegend/actions/go-min-age@v1), no copy needed
+# For local dev, see go-min-age/action.yml in this repo
+
 echo "Done. Next: customize BINARY_NAME in ci.yml/release.yml and run setup-branch-protection.sh"

@@ -15,9 +15,12 @@ This template implements the **Weekly Update → PR with CI Gate → Rebase & Me
 cp actions/templates/ci.yml .github/workflows/ci.yml
 cp actions/templates/weekly-update.yml .github/workflows/weekly-update.yml
 cp actions/templates/release.yml .github/workflows/release.yml
+cp actions/templates/frontend/bunfig.toml frontend/bunfig.toml
 
-# Ensure .github/workflows exists
-mkdir -p .github/workflows
+# Ensure dirs exist
+mkdir -p .github/workflows frontend
+
+# Go min-age is composite Delnegend/actions/go-min-age@v1 — no copy needed (or copy .github/actions/go-min-age locally for offline)
 ```
 
 ## 2. Customize Placeholders
@@ -38,7 +41,8 @@ Also:
   "@typescript/native": "npm:typescript@7.0.2",
   "overrides": { "typescript": "npm:@typescript/typescript6@6.0.2" }
   ```
-- In `weekly-update.yml`, verify `Hold` comment matches your `package.json` hold.
+- In `frontend/bunfig.toml`, ensure `minimumReleaseAge = 1209600` (14d) for repo-level Bun enforcement (CLI `--minimum-release-age` overrides it).
+- In `weekly-update.yml`, verify `Hold` comment matches your `package.json` hold and `uses: Delnegend/actions/go-min-age@v1` min-age.
 
 ## 3. Validate YAML
 
@@ -95,9 +99,11 @@ git push
 
 ## 7. Notes for AI
 
-- Prefer `continue-on-error: true` + `if: always()` in `weekly-update.yml` so PR is always created; `ci.yml` is the gate, not the updater.
+- No local build gates in `weekly-update.yml` — `ci.yml` full-matrix is single gate (removed `Install system dependencies`/`Build frontend`/`Validate Go build`/`Build gate` per gallery-preprocessor fd4b2c5). Keep `if: always()` for `Open PR` only so PR still opens on updater failure.
+- Dual min-age: repo-level `frontend/bunfig.toml: [install] minimumReleaseAge = 1209600` (every `bun install`/`add`) + action-level `Delnegend/actions/go-min-age@v1` (proxy 14d, `go get -d` per-module) and `bun update --minimum-release-age`. CLI flags override `bunfig.toml`.
 - Weekly cadence = full matrix is acceptable (not daily).
 - Keep TS hold until `vuejs/language-tools#6124` closed and TS 7.1 API stable.
+- PRs via `peter-evans/create-pull-request@v8` with `GITHUB_TOKEN` show `action_required` for `ci.yml` `pull_request` — click **Approve and run** (keep `GITHUB_TOKEN`, weekly cadence = 1 click/week; PAT auto-run not needed).
 - Document all `BINARY_NAME` replacements; don't hardcode `gallery-preprocessor`.
 
 ## References

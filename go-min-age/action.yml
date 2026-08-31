@@ -1,0 +1,112 @@
+name: Go min-age update
+description: Update Go dependencies respecting minimum release age (via proxy.golang.org Time). Hoisted from gallery-preprocessor weekly-update.
+author: Delnegend
+
+inputs:
+  min-age:
+    description: Minimum release age in seconds (e.g., 1209600 = 14d, 604800 = 7d)
+    required: false
+    default: '1209600'
+  go-version-file:
+    description: Path to go.mod for setup-go
+    required: false
+    default: 'go.mod'
+  working-directory:
+    description: Working directory for go list / go get
+    required: false
+    default: '.'
+  go-get-args:
+    description: Extra args for go get (e.g., -d for download-only)
+    required: false
+    default: '-d'
+  proxy-url:
+    description: Go proxy URL for @v/*.info
+    required: false
+    default: 'https://proxy.golang.org'
+
+outputs:
+  updated:
+    description: Whether any Go modules were updated (true/false)
+    value: ${{ steps.update.outputs.updated }}
+  to-update:
+    description: Space-separated list of mod@latest that passed min-age
+    value: ${{ steps.update.outputs.to-update }}
+
+runs:
+  using: composite
+  steps:
+    - name: Update Go dependencies with min-age
+      id: update
+      shell: bash
+      env:
+        GO_MIN_AGE: ${{ inputs.min-age }}
+        GO_GET_ARGS: ${{ inputs.go-get-args }}
+        PROXY_URL: ${{ inputs.proxy-url }}
+        WORKING_DIR: ${{ inputs.working-directory }}
+      run: |
+        set -e
+        cd "$WORKING_DIR"
+        echo "Updating Go dependencies (min age: ${GO_MIN_AGE}s)..."
+        CUTOFF_EPOCH=$(($(date +%s) - GO_MIN_AGE))
+        echo "Cutoff date: $(date -u -d "@$CUTOFF_EPOCH" --iso-8601=seconds 2>/dev/null || date -u -r "$CUTOFF_EPOCH" +%Y-%m-%dT%H:%M:%SZ)"
+
+        UPDATABLE=$(go list -m -u all 2>/dev/null | awk '$3 ~ /^\[v.*\]$/ {print $1, $2, substr($3,2,length($3)-2)}' || true)
+        if [ -z "$UPDATABLE" ]; then
+          echo "No Go updates available"
+          echo "updated=false" >> "$GITHUB_OUTPUT"
+          echo "to-update=" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        echo "Modules with updates:"
+        echo "$UPDATABLE"
+        TO_UPDATE=""
+        while read -r mod cur latest; do
+          [ -z "$mod" ] && continue
+          echo "Checking $mod $cur -> $latest ..."
+          MOD_LOWER=$(echo "$mod" | tr '[:upper:]' '[:lower:]')
+          INFO_URL="${PROXY_URL}/${MOD_LOWER}/@v/${latest}.info"
+          INFO=$(curl -sf "$INFO_URL" 2>/dev/null || echo "")
+          if [ -z "$INFO" ]; then
+            echo "  -> could not fetch info from $INFO_URL, skipping"
+            continue
+          fi
+          TIME_STR=$(echo "$INFO" | grep -o '"Time":"[^"]*"' | cut -d'"' -f4 || true)
+          if [ -z "$TIME_STR" ]; then
+            echo "  -> no Time field, skipping"
+            continue
+          fi
+          VER_EPOCH=$(date -d "$TIME_STR" +%s 2>/dev/null || echo 0)
+          if [ "$VER_EPOCH" -eq 0 ]; then
+            echo "  -> could not parse time $TIME_STR, skipping"
+            continue
+          fi
+          AGE=$(( $(date +%s) - VER_EPOCH ))
+          AGE_DAYS=$(( AGE / 86400 ))
+          if [ "$VER_EPOCH" -le "$CUTOFF_EPOCH" ]; then
+            echo "  -> OK (age ${AGE_DAYS}d, released $TIME_STR) - will update"
+            TO_UPDATE="$TO_UPDATE $mod@$latest"
+          else
+            echo "  -> SKIP (age ${AGE_DAYS}d, released $TIME_STR) - too recent (<2 weeks)"
+          fi
+        done <<< "$UPDATABLE"
+
+        if [ -n "$TO_UPDATE" ]; then
+          echo "Updating:$TO_UPDATE"
+          for mod in $TO_UPDATE; do
+            echo "go get $GO_GET_ARGS $mod"
+            # shellcheck disable=SC2086
+            go get $GO_GET_ARGS "$mod" || echo "::warning::go get $GO_GET_ARGS $mod failed, will try go mod tidy"
+          done
+          echo "updated=true" >> "$GITHUB_OUTPUT"
+          echo "to-update=$TO_UPDATE" >> "$GITHUB_OUTPUT"
+        else
+          echo "No Go modules passed min-age filter"
+          echo "updated=false" >> "$GITHUB_OUTPUT"
+          echo "to-update=" >> "$GITHUB_OUTPUT"
+        fi
+        go mod tidy
+        echo "Go update done"
+
+branding:
+  icon: package
+  color: blue
