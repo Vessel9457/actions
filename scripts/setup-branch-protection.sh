@@ -22,7 +22,7 @@ if ! command -v gh >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "Setting up branch protection for $REPO (main) — 4 required checks, linear history, rebase only..."
+echo "Setting up branch protection for $REPO (main) — 4 required checks, linear history, rebase only + auto-merge..."
 
 # 1. Branch protection
 PROTECTION_JSON=$(cat <<'JSON'
@@ -37,7 +37,7 @@ PROTECTION_JSON=$(cat <<'JSON'
   "allow_force_pushes": false,
   "allow_deletions": false,
   "required_linear_history": true,
-  "allow_auto_merge": false
+  "allow_auto_merge": true
 }
 JSON
 )
@@ -51,20 +51,20 @@ else
   echo "Branch protection set."
 fi
 
-# 2. Merge methods
+# 2. Merge methods + auto-merge
 if $DRY_RUN; then
-  echo "[dry-run] Would PATCH /repos/$REPO with allow_rebase_merge=true, squash/merge false"
+  echo "[dry-run] Would PATCH /repos/$REPO with allow_rebase_merge=true, squash/merge false, auto-merge true"
 else
-  gh api "repos/$REPO" -X PATCH -f allow_rebase_merge=true -f allow_squash_merge=false -f allow_merge_commit=false > /tmp/merge.out 2>&1
-  cat /tmp/merge.out | python3 -m json.tool | grep -E "allow_(rebase|squash|merge)" | head -n 10
-  echo "Merge methods set to rebase only."
+  gh api "repos/$REPO" -X PATCH -f allow_rebase_merge=true -f allow_squash_merge=false -f allow_merge_commit=false -f allow_auto_merge=true > /tmp/merge.out 2>&1
+  cat /tmp/merge.out | python3 -m json.tool | grep -E "allow_(rebase|squash|merge|auto)" | head -n 10
+  echo "Merge methods set to rebase only + auto-merge enabled."
 fi
 
 # 3. Verify
 if ! $DRY_RUN; then
   echo "Verifying..."
   gh api "repos/$REPO/branches/main/protection" --jq '{required_status_checks, required_linear_history}' 2>&1 | python3 -m json.tool
-  gh api "repos/$REPO" --jq '{allow_rebase_merge, allow_squash_merge, allow_merge_commit}' 2>&1 | python3 -m json.tool
+  gh api "repos/$REPO" --jq '{allow_rebase_merge, allow_squash_merge, allow_merge_commit, allow_auto_merge}' 2>&1 | python3 -m json.tool
 fi
 
-echo "Done. PRs to main now require 4 checks and linear history; only Rebase and merge is allowed."
+echo "Done. PRs to main now require 4 checks and linear history; only Rebase and merge is allowed, auto-merge enabled for Dependabot patch/minor."

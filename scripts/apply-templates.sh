@@ -19,7 +19,7 @@ echo "Applying templates from $TEMPLATE_DIR to $TARGET"
 
 mkdir -p "$TARGET/.github/workflows"
 
-for f in ci.yml release.yml; do
+for f in ci.yml release.yml dependabot-auto-merge.yml; do
   if [[ -f "$TARGET/.github/workflows/$f" ]]; then
     echo "Skipping $f — already exists (merge manually)"
   else
