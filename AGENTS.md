@@ -1,12 +1,12 @@
 # AGENTS.md — Instructions for AI Agents
 
-This template implements the **Dependabot → PR with CI Gate → Rebase & Merge → Auto Release** flow. Apply it to a new repository in the following order. All paths are relative to the target repo root unless noted as `actions/` (this template repo).
+This template implements the **Dependabot → PR with CI Gate → Rebase & Merge → Auto Release** flow. It works for any workspace — `Go + Bun + Wails` is just the example stack. Adapt `just check` and build steps to your language. Apply it to a new repository in the following order. All paths are relative to the target repo root unless noted as `actions/` (this template repo).
 
 ## 0. Prerequisites
 
 - Target repo has `main` as default branch (rename `next` → `main` if needed: `git push origin next:main --force && gh api PATCH default_branch=main && git branch -D next && git push --delete origin next`).
 - `gh` CLI authenticated (`gh auth status`), `git` configured.
-- Stack detection: check for `go.mod`, `frontend/package.json`, `justfile`, `wails.json`.
+- Stack detection (examples — adapt to your workspace): check for `go.mod`, `frontend/package.json`, `justfile`, `wails.json` (or any `just check` + build matrix your stack needs).
 
 ## 1. Copy Templates
 
@@ -23,14 +23,14 @@ mkdir -p .github/workflows
 
 ## 2. Customize Placeholders
 
-Search for `TODO` or `BINARY_NAME` in the copied files:
+Search for `TODO` or `BINARY_NAME` in the copied files (all `Wails`/`Bun` specifics are examples — keep only your stack):
 
 | Placeholder | Replace With | Example |
 |-------------|-------------|---------|
 | `BINARY_NAME` | Repo name / `wails.json:name` | `your-app` |
 | `cooldown` in `dependabot.yml` | Desired min-age (default `14` = 14d) | Keep or adjust |
-| `libgtk-3-dev libwebkit2gtk-4.1-dev` | Your system deps | Keep for Wails, remove for pure Go |
-| `just check` | Your `justfile` check recipe | `just check` or `go vet ./...` |
+| `libgtk-3-dev libwebkit2gtk-4.1-dev` | Your system deps | Example for Wails — keep for Wails, remove for pure Go/generic |
+| `just check` | Your `justfile` check recipe | `just check` or `go vet ./...` or any `check` your stack needs |
 
 Also:
 - In `frontend/package.json`, ensure side-by-side TS is set if using Vue:
@@ -179,7 +179,7 @@ Permissions `contents: write`, `pull-requests: write`, `allow_auto_merge: true` 
 | `Build (darwin/universal)` | `macos-latest` | same, `wails build -platform darwin/universal` |
 | `Build (windows/amd64)` | `windows-latest` | `choco install nsis`, `wails build -nsis` |
 
-Weekly cadence makes full matrix acceptable (vs daily where single `ubuntu` check would be cheaper). Check names are `Check (just check)` and `Build (linux/amd64)` etc. — these strings are the `required_status_checks.contexts` in branch protection.
+Weekly cadence makes full matrix acceptable (vs daily where single `ubuntu` check would be cheaper). Check names are `Check (just check)` and `Build (linux/amd64)` etc. — these strings are the `required_status_checks.contexts` in branch protection. Example shows `Wails` matrix (`linux/amd64`, `darwin/universal`, `windows/amd64`) — adapt `go build`/`bun run build`/`wails build` to your stack.
 
 ### release.yml
 
@@ -224,7 +224,7 @@ Effect: PR cannot be merged unless all 4 checks pass and branch is up-to-date; o
 - Change `BINARY_NAME` in `release.yml:22` and `ci.yml` artifact names.
 - Change `cooldown` in `dependabot.yml` (`default-days: 14`) to adjust min-age.
 - Replace `just check` with your own `check` recipe or inline `go vet`/`oxlint`.
-- For non-Wails projects, remove `libgtk`/`webkit` and `wails` steps, keep `go build`/`bun run build`.
+- For non-Wails/generic projects, remove `libgtk`/`webkit` and `wails` steps, keep only your stack's build (e.g. `go build`, `bun run build`, `cargo build`, `pnpm build`). This repo's `Wails` steps are just an example.
 
 ### History
 
