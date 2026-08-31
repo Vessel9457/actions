@@ -19,7 +19,7 @@ echo "Applying templates from $TEMPLATE_DIR to $TARGET"
 
 mkdir -p "$TARGET/.github/workflows"
 
-for f in ci.yml weekly-update.yml release.yml; do
+for f in ci.yml release.yml; do
   if [[ -f "$TARGET/.github/workflows/$f" ]]; then
     echo "Skipping $f — already exists (merge manually)"
   else
@@ -27,6 +27,15 @@ for f in ci.yml weekly-update.yml release.yml; do
     echo "Copied $f"
   fi
 done
+
+if [[ -f "$TEMPLATE_DIR/renovate.json" ]]; then
+  if [[ -f "$TARGET/renovate.json" ]]; then
+    echo "Skipping renovate.json — already exists (merge manually)"
+  else
+    cp "$TEMPLATE_DIR/renovate.json" "$TARGET/renovate.json"
+    echo "Copied renovate.json (14d min-age, grouped, TS hold)"
+  fi
+fi
 
 # Bun min-age repo-level (frontend/bunfig.toml)
 if [[ -f "$TEMPLATE_DIR/frontend/bunfig.toml" ]]; then
@@ -38,8 +47,5 @@ if [[ -f "$TEMPLATE_DIR/frontend/bunfig.toml" ]]; then
     echo "Copied frontend/bunfig.toml (repo-level min-age 14d)"
   fi
 fi
-
-# Go min-age composite is used remotely (Delnegend/actions/go-min-age@v1), no copy needed
-# For local dev, see go-min-age/action.yml in this repo
 
 echo "Done. Next: customize BINARY_NAME in ci.yml/release.yml and run setup-branch-protection.sh"

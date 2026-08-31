@@ -5,13 +5,13 @@ Detailed behavior of the three workflows and branch protection.
 ## Overview
 
 ```
-Weekly (Mon 02:00 UTC)
+Renovate (before 4am Mon, 14d, grouped)
   │
   ▼
-weekly-update.yml ──always──► PR chore/update-deps (label: dependencies)
-                                │
-                                ▼
-                             ci.yml (4 checks, full matrix)
+renovate.json ──grouped──► PR chore/update-deps-all (label: dependencies)
+                                 │
+                                 ▼
+                              ci.yml (4 checks, full matrix)
                                 │
                     ┌───────────┴───────────┐
                     │                       │
@@ -29,31 +29,20 @@ weekly-update.yml ──always──► PR chore/update-deps (label: dependencie
               + artifacts
 ```
 
-## weekly-update.yml
+## renovate.json
 
-**Trigger:** `schedule: cron '0 2 * * 1'` (Mon 02:00 UTC) + `workflow_dispatch`.
+**Schedule:** `before 4am on Monday` (Mon 02:00 UTC) + `timezone: UTC`, `minimumReleaseAge: "14 days"` (14d) grouped `all dependencies` → `chore/update-deps-all` (`prConcurrentLimit: 1`).
 
-**Env:** `BUN_MIN_RELEASE_AGE=1209600` (14d), `GO_MIN_RELEASE_AGE=1209600` (14d). 2-week min-age prevents bumping to a 3-day-old breaking release (e.g., `typescript@7.0.2` broke `vue-tsc`).
+**Config** (`renovate.json:1` `extends: config:recommended`):
+- `labels: ["dependencies"]`, `branchPrefix: "chore/update-deps-"`, `groupName: "all dependencies"` (single PR/week)
+- `packageRules`: `typescript` `allowedVersions: "<7.0.0"` (TS6 hold, `vuejs/language-tools#6124`, `frontend/package.json:overrides`), `all dependencies` `minimumReleaseAge: "14 days"` for Go+Bun
+- `dependencyDashboard: true`, `rebaseWhen: behind-base-branch`
 
-**Repo-level + Action-level dual enforcement:**
-- **Bun**: `frontend/bunfig.toml:1` `[install] minimumReleaseAge = 1209600` enforces at repo level for every `bun install`/`bun update`/`bun add` (dev, `ci.yml`, `release.yml`). `weekly-update.yml:1` flag `bun update --latest --minimum-release-age $BUN_MIN_RELEASE_AGE` overrides where needed but now redundant — defense-in-depth so local `bun add` can't bypass 14d CI.
-- **Go**: No official repo-level `go.mod` min-age, so only action-level via composite `Delnegend/actions/go-min-age@v1` (hoisted from `weekly-update.yml` bash). Skip Go repo-level.
+**Repo-level + Renovate dual enforcement:**
+- **Bun**: `frontend/bunfig.toml:1` `[install] minimumReleaseAge = 1209600` enforces at repo level for every `bun install`/`add` (Renovate `minimumReleaseAge` enforces at PR level).
+- **Go**: No `go.mod` repo-level, so only Renovate `minimumReleaseAge`.
 
-**Steps:**
-
-1. **Update Go deps** — `uses: Delnegend/actions/go-min-age@v1` with `min-age: 1209600` (composite: `go list -m -u all`, fetch `proxy.golang.org/@v/*.info` `Time`, filter by cutoff, `go get -d` per-module, `go mod tidy`).
-
-2. **Update frontend** — `cd frontend && bun update --latest --minimum-release-age $BUN_MIN_RELEASE_AGE`. Then **verify TS hold**: `grep '"typescript": "npm:@typescript/typescript6'` must pass; if not, `exit 1` (fails updater, but `Draft PR`/`Open PR` use `if: always()` so PR still opens — the hold is enforced via `overrides` anyway).
-
-3. **Check for changes** — `git status --porcelain` → `changed=true`.
-
-   *No local build validation here* — `ci.yml` full-matrix is the single merge gate (removed `Install system dependencies`/`Build frontend`/`Validate Go build`/`Build gate` that previously ran `continue-on-error`).
-
-4. **Draft PR body** — `uses: Delnegend/actions/draft-pr-body@v1` (hoisted from `git diff -- go.mod` + `frontend/package.json` → `## Dependency changes`).
-
-5. **Open PR** — `peter-evans/create-pull-request@v8` with `if: always() && changed`, `branch: chore/update-deps`, `labels: dependencies`, `delete-branch: true`. Always creates/updates PR; CI will gate merge. Note: PRs created with `GITHUB_TOKEN` show `action_required` for `ci.yml` `pull_request` — click **Approve and run** (keep `GITHUB_TOKEN`; PAT `secrets.PAT` would auto-run but not needed for weekly cadence).
-
-**Why `if: always()`?** To satisfy “always PR” — even if updater fails, PR still opens and surfaces via CI, not as silent failed run. `continue-on-error` local gates were removed because `ci.yml` is now the single gate.
+**Flow:** Renovate creates/updates `PR chore/update-deps-all` (grouped, 14d) → `ci.yml` full-matrix single gate → `release.yml` auto patch on `label: dependencies` (`startsWith(head.ref,'chore/update-deps')` for grouped branch).
 
 ## ci.yml
 

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "timezone": "UTC",
+  "schedule": ["before 4am on Monday"],
+  "labels": ["dependencies"],
+  "branchPrefix": "chore/update-deps-",
+  "commitMessagePrefix": "chore(deps): ",
+  "dependencyDashboard": true,
+  "prConcurrentLimit": 1,
+  "rebaseWhen": "behind-base-branch",
+  "minimumReleaseAge": "14 days",
+  "packageRules": [
+    {
+      "description": "Hold typescript (aliased to TS6 for vue-tsc) below v7 until vue-tsc supports TS 7.1 API — vuejs/language-tools#6124 — remove when fixed. @typescript/native is TS7 Go tsc and must remain updatable.",
+      "matchDatasources": ["npm"],
+      "matchPackageNames": ["typescript"],
+      "allowedVersions": "<7.0.0"
+    },
+    {
+      "description": "Group all Go (gomod) + Bun (npm) updates into single weekly PR (replaces weekly-update chore/update-deps)",
+      "groupName": "all dependencies",
+      "groupSlug": "all",
+      "matchDatasources": ["go", "npm"],
+      "minimumReleaseAge": "14 days"
+    }
+  ]
+}
