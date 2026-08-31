@@ -10,7 +10,7 @@ Reusable GitHub Actions flow: **Weekly Update → PR with full-matrix CI gate �
 
 ```mermaid
 flowchart TD
-    A[Dependabot<br/>weekly Mon 02:00<br/>dependabot.yml] -->|grouped PR<br/>chore(deps)<br/>assignees: Delnegend| B[Pull Request]
+    A[Dependabot<br/>weekly Mon 02:00<br/>dependabot.yml] -->|grouped PR| B[Pull Request]
     B --> C[CI Checks<br/>ci.yml<br/>Check + Build ×3]
     C -->|all green, patch/minor| D[Auto-merge<br/>dependabot-auto-merge.yml<br/>rebase]
     C -->|any red or major| E[Assigned to you<br/>human fix required]
