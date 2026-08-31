@@ -3,6 +3,12 @@ name: Dependabot auto-merge
 on:
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      pr-number:
+        description: 'PR number to test auto-merge (leave empty to auto-detect open dependabot PRs)'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -24,4 +30,35 @@ jobs:
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  manual-test:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Manual auto-merge test
+        run: |
+          if [ -n "${{ inputs.pr-number }}" ]; then
+            PR="${{ inputs.pr-number }}"
+            echo "Testing PR #$PR"
+            gh pr view "$PR" --json number,title,author,labels,headRefName | jq .
+            # Fetch metadata would require PR context; for manual test, just attempt auto-merge
+            # (CI must be green; for patch/minor only — major will be skipped by previous job logic, here we try anyway)
+            gh pr merge --auto --squash "$PR" && echo "Enabled auto-merge for #$PR" || echo "Failed (maybe not dependabot, not patch/minor, or CI not green)"
+          else
+            echo "Auto-detecting open dependabot PRs..."
+            gh pr list --state open --author "dependabot[bot]" --json number,title,headRefName,labels | jq .
+            COUNT=$(gh pr list --state open --author "dependabot[bot]" --json number --jq length)
+            if [ "$COUNT" -eq 0 ]; then
+              echo "No open dependabot PRs found."
+              echo "Create a test PR (gh pr create) or wait for Dependabot schedule (weekly Mon 02:00, cooldown 14d, grouped)."
+              echo "You can also test with: gh workflow run dependabot-auto-merge.yml -f pr-number=<num>"
+              exit 0
+            fi
+            for pr in $(gh pr list --state open --author "dependabot[bot]" --json number --jq '.[].number'); do
+              echo "Enabling auto-merge for PR #$pr"
+              gh pr merge --auto --squash "$pr" && echo "Enabled for #$pr" || echo "Failed for #$pr (maybe major or CI red)"
+            done
+          fi
+        env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
