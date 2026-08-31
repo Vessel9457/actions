@@ -28,23 +28,12 @@ for f in ci.yml release.yml; do
   fi
 done
 
-if [[ -f "$TEMPLATE_DIR/renovate.json" ]]; then
-  if [[ -f "$TARGET/renovate.json" ]]; then
-    echo "Skipping renovate.json — already exists (merge manually)"
+if [[ -f "$TEMPLATE_DIR/dependabot.yml" ]]; then
+  if [[ -f "$TARGET/.github/dependabot.yml" ]]; then
+    echo "Skipping dependabot.yml — already exists (merge manually)"
   else
-    cp "$TEMPLATE_DIR/renovate.json" "$TARGET/renovate.json"
-    echo "Copied renovate.json (14d min-age, grouped, TS hold)"
-  fi
-fi
-
-# Bun min-age repo-level (frontend/bunfig.toml)
-if [[ -f "$TEMPLATE_DIR/frontend/bunfig.toml" ]]; then
-  if [[ -f "$TARGET/frontend/bunfig.toml" ]]; then
-    echo "Skipping frontend/bunfig.toml — already exists"
-  else
-    mkdir -p "$TARGET/frontend"
-    cp "$TEMPLATE_DIR/frontend/bunfig.toml" "$TARGET/frontend/bunfig.toml"
-    echo "Copied frontend/bunfig.toml (repo-level min-age 14d)"
+    cp "$TEMPLATE_DIR/dependabot.yml" "$TARGET/.github/dependabot.yml"
+    echo "Copied dependabot.yml (weekly, 14d cooldown, grouped)"
   fi
 fi
 

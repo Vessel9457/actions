@@ -1,6 +1,6 @@
 # AGENTS.md — Instructions for AI Agents
 
-This template implements the **Renovate → PR with CI Gate → Rebase & Merge → Auto Release** flow. Apply it to a new repository in the following order. All paths are relative to the target repo root unless noted as `actions/` (this template repo).
+This template implements the **Dependabot → PR with CI Gate → Rebase & Merge → Auto Release** flow. Apply it to a new repository in the following order. All paths are relative to the target repo root unless noted as `actions/` (this template repo).
 
 ## 0. Prerequisites
 
@@ -14,11 +14,10 @@ This template implements the **Renovate → PR with CI Gate → Rebase & Merge �
 # From actions/ template repo
 cp actions/templates/ci.yml .github/workflows/ci.yml
 cp actions/templates/release.yml .github/workflows/release.yml
-cp actions/templates/renovate.json renovate.json
-cp actions/templates/frontend/bunfig.toml frontend/bunfig.toml
+cp actions/templates/dependabot.yml .github/dependabot.yml
 
 # Ensure dirs exist
-mkdir -p .github/workflows frontend
+mkdir -p .github/workflows
 ```
 
 ## 2. Customize Placeholders
@@ -28,7 +27,7 @@ Search for `TODO` or `BINARY_NAME` in the copied files:
 | Placeholder | Replace With | Example |
 |-------------|-------------|---------|
 | `BINARY_NAME` | Repo name / `wails.json:name` | `your-app` |
-| `minimumReleaseAge` in `renovate.json` / `frontend/bunfig.toml` | Desired min-age (default `14 days` / `1209600` = 14d) | Keep or adjust |
+| `cooldown` in `dependabot.yml` | Desired min-age (default `14` = 14d) | Keep or adjust |
 | `libgtk-3-dev libwebkit2gtk-4.1-dev` | Your system deps | Keep for Wails, remove for pure Go |
 | `just check` | Your `justfile` check recipe | `just check` or `go vet ./...` |
 
@@ -39,14 +38,12 @@ Also:
   "@typescript/native": "npm:typescript@7.0.2",
   "overrides": { "typescript": "npm:@typescript/typescript6@6.0.2" }
   ```
-- In `frontend/bunfig.toml`, ensure `minimumReleaseAge = 1209600` (14d) for repo-level Bun enforcement.
-- In `renovate.json`, verify `schedule` (`before 4am on Monday`), `minimumReleaseAge: "14 days"`, and `allowedVersions: "<7.0.0"` for TS hold.
+- In `dependabot.yml`, verify `schedule` (`weekly` `day: monday` `time: "02:00"`), `cooldown: 14`, and `ignore: typescript >=7.0.0` for TS hold.
 
 ## 3. Validate YAML
 
 ```bash
-python3 -c "import yaml, pathlib; [yaml.safe_load(open(f)) for f in ['.github/workflows/ci.yml', '.github/workflows/release.yml']]; print('yaml valid')"
-python3 -m json.tool renovate.json > /dev/null && echo "renovate json valid"
+python3 -c "import yaml, pathlib; [yaml.safe_load(open(f)) for f in ['.github/workflows/ci.yml', '.github/workflows/release.yml', '.github/dependabot.yml']]; print('yaml valid')"
 python3 -m json.tool frontend/package.json > /dev/null && echo "json valid"
 ```
 
@@ -81,10 +78,10 @@ gh api repos/Delnegend/<repo> -X PATCH -f allow_rebase_merge=true -f allow_squas
 ## 5. Commit & Push
 
 ```bash
-git add .github/workflows/ci.yml .github/workflows/release.yml renovate.json frontend/bunfig.toml frontend/package.json
-git commit -m "ci: add renovate→PR→CI→release flow from actions template
+git add .github/workflows/ci.yml .github/workflows/release.yml .github/dependabot.yml frontend/package.json
+git commit -m "ci: add dependabot→PR→CI→release flow from actions template
 
-- renovate 14d grouped PR (all dependencies) on schedule before 4am Mon
+- dependabot 14d cooldown grouped PR (gomod + npm) on schedule weekly Mon 02:00
 - CI gates merge (rebase only)
 - TS6 hold for vue-tsc until TS7.1"
 git push
@@ -98,13 +95,13 @@ git push
 
 ## 7. Notes for AI
 
-- Renovate replaces `weekly-update.yml` — no custom updater, `ci.yml` full-matrix is single gate. Renovate `minimumReleaseAge: "14 days"` + `schedule: before 4am on Monday` + `groupName: all dependencies` gives single PR/week.
-- Dual min-age: repo-level `frontend/bunfig.toml: [install] minimumReleaseAge = 1209600` (every `bun install`/`add`) + Renovate `minimumReleaseAge: "14 days"` (PR level).
+- Dependabot replaces `weekly-update.yml`/`renovate.json` — no custom updater, `ci.yml` full-matrix is single gate. Dependabot `cooldown: 14` + `schedule: weekly` + `groups: all-dependencies` gives 1 PR per ecosystem (2 PRs/week, pure YAGNI).
+- No repo-level `frontend/bunfig.toml` (deleted for pure YAGNI) — Dependabot `cooldown` is single source; `frontend/package.json:overrides` `typescript` stays as stdlib safety net.
 - Weekly cadence = full matrix is acceptable (not daily).
-- Keep TS hold until `vuejs/language-tools#6124` closed and TS 7.1 API stable (`renovate.json: allowedVersions: "<7.0.0"` + `frontend/package.json: overrides`).
+- Keep TS hold until `vuejs/language-tools#6124` closed and TS 7.1 API stable (`dependabot.yml: ignore: typescript >=7.0.0` + `frontend/package.json: overrides`).
 - Document all `BINARY_NAME` replacements; don't hardcode example names.
 
 ## References
 
 - Flow docs: `docs/FLOW.md`
-- Templates: `templates/ci.yml:1`, `templates/renovate.json:1`, `templates/release.yml:1`, `templates/frontend/bunfig.toml:1`
+- Templates: `templates/ci.yml:1`, `templates/dependabot.yml:1`, `templates/release.yml:1`

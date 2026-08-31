@@ -1,2 +1,0 @@
-[install]
-minimumReleaseAge = 1209600 # 14d — keep parity with GO_MIN_RELEASE_AGE. CLI --minimum-release-age overrides this.

@@ -29,20 +29,18 @@ renovate.json ──grouped──► PR chore/update-deps-all (label: dependenci
               + artifacts
 ```
 
-## renovate.json
+## dependabot.yml
 
-**Schedule:** `before 4am on Monday` (Mon 02:00 UTC) + `timezone: UTC`, `minimumReleaseAge: "14 days"` (14d) grouped `all dependencies` → `chore/update-deps-all` (`prConcurrentLimit: 1`).
+**Schedule:** `weekly` `day: monday` `time: "02:00"` (Mon 02:00 UTC), `cooldown: 14d` grouped `all-dependencies` → 1 PR per ecosystem (`gomod` + `npm` frontend).
 
-**Config** (`renovate.json:1` `extends: config:recommended`):
-- `labels: ["dependencies"]`, `branchPrefix: "chore/update-deps-"`, `groupName: "all dependencies"` (single PR/week)
-- `packageRules`: `typescript` `allowedVersions: "<7.0.0"` (TS6 hold, `vuejs/language-tools#6124`, `frontend/package.json:overrides`), `all dependencies` `minimumReleaseAge: "14 days"` for Go+Bun
-- `dependencyDashboard: true`, `rebaseWhen: behind-base-branch`
+**Config** (`dependabot.yml:1` `version: 2`):
+- `labels: [dependencies]`, `commit-message: prefix: "chore(deps)"`, `groups: all-dependencies: patterns: ["*"]` (single PR per ecosystem, 2 PRs/week, `open-pull-requests-limit: 1`)
+- `ignore: typescript >=7.0.0` (TS6 hold, `vuejs/language-tools#6124`, `frontend/package.json:overrides` stays as stdlib safety net)
+- `cooldown: default-days: 14` for Go+Bun
 
-**Repo-level + Renovate dual enforcement:**
-- **Bun**: `frontend/bunfig.toml:1` `[install] minimumReleaseAge = 1209600` enforces at repo level for every `bun install`/`add` (Renovate `minimumReleaseAge` enforces at PR level).
-- **Go**: No `go.mod` repo-level, so only Renovate `minimumReleaseAge`.
+**Repo-level:** No `frontend/bunfig.toml` (pure YAGNI, deleted) — Dependabot `cooldown` is single source.
 
-**Flow:** Renovate creates/updates `PR chore/update-deps-all` (grouped, 14d) → `ci.yml` full-matrix single gate → `release.yml` auto patch on `label: dependencies` (`startsWith(head.ref,'chore/update-deps')` for grouped branch).
+**Flow:** Dependabot creates/updates `PR dependabot/*` (grouped, 14d) → `ci.yml` full-matrix single gate → `release.yml` auto patch on `label: dependencies` (label-only gate).
 
 ## ci.yml
 
