@@ -49,7 +49,7 @@ weekly-update.yml ──always──► PR chore/update-deps (label: dependencie
 
    *No local build validation here* — `ci.yml` full-matrix is the single merge gate (removed `Install system dependencies`/`Build frontend`/`Validate Go build`/`Build gate` that previously ran `continue-on-error`).
 
-4. **Draft PR body** — `git diff -- go.mod` + `frontend/package.json` → `## Dependency changes`.
+4. **Draft PR body** — `uses: Delnegend/actions/draft-pr-body@v1` (hoisted from `git diff -- go.mod` + `frontend/package.json` → `## Dependency changes`).
 
 5. **Open PR** — `peter-evans/create-pull-request@v8` with `if: always() && changed`, `branch: chore/update-deps`, `labels: dependencies`, `delete-branch: true`. Always creates/updates PR; CI will gate merge. Note: PRs created with `GITHUB_TOKEN` show `action_required` for `ci.yml` `pull_request` — click **Approve and run** (keep `GITHUB_TOKEN`; PAT `secrets.PAT` would auto-run but not needed for weekly cadence).
 

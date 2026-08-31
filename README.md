@@ -54,6 +54,7 @@ git push
 | `templates/package.json.overrides` | Bun `overrides` + comment for TS hold | Bun |
 | `templates/frontend/bunfig.toml` | Repo-level `minimumReleaseAge = 1209600` (14d) | `bun install`/`update` |
 | `go-min-age/action.yml` | Composite for Go `proxy.golang.org` 14d filter (`go get -d` per-module) | `uses: Delnegend/actions/go-min-age@v1` |
+| `draft-pr-body/action.yml` | Composite for PR body from `go.mod` + `frontend/package.json` diffs | `uses: Delnegend/actions/draft-pr-body@v1` |
 
 See `docs/FLOW.md` for detailed behavior and `AGENTS.md` for AI agent instructions.
 
