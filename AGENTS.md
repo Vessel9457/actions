@@ -128,7 +128,8 @@ dependabot.yml ──grouped──► PR dependabot/* (label: dependencies, assi
                      │                       ▼
                      ▼                Assigned to you
               Auto-merge                (human fix)
-              rebase (dependabot-auto-merge.yml)
+              rebase + dispatch
+         (dependabot-auto-merge.yml)
                      │
                      ▼
                release.yml
@@ -150,7 +151,7 @@ dependabot.yml ──grouped──► PR dependabot/* (label: dependencies, assi
 
 **Repo-level:** No `frontend/bunfig.toml` (pure YAGNI, deleted) — Dependabot `cooldown` is single source.
 
-**Flow:** Dependabot creates/updates `PR dependabot/*` (grouped, 14d, always `Delnegend`) → `ci.yml` full-matrix single gate → `dependabot-auto-merge.yml` auto-merge patch/minor or assign on major/red → `release.yml` auto patch on `label: dependencies`.
+**Flow:** Dependabot creates/updates `PR dependabot/*` (grouped, 14d, always `Delnegend`) → `ci.yml` full-matrix single gate → `dependabot-auto-merge.yml` auto-merge patch/minor + `dispatch-release` (`workflow_dispatch`) → `release.yml` auto patch on `label: dependencies` (with `pull_request: closed` fallback for manual merges).
 
 ### dependabot-auto-merge.yml
 
@@ -158,9 +159,12 @@ dependabot.yml ──grouped──► PR dependabot/* (label: dependencies, assi
 
 **Jobs:**
 - `automerge`: `dependabot/fetch-metadata@v2` `update-type` → `if: != major` → `gh pr merge --auto --rebase` (patch/minor auto, major held for human).
+- `dispatch-release`: `needs: automerge` → `fetch-metadata` gate `!= major` → poll `gh pr view --json state` until `MERGED` (60×10s) → `gh workflow run release.yml --ref main -f release_version=$NEXT -f create_release=true` (workaround for `GITHUB_TOKEN` not triggering `pull_request: closed`/`push` downstream).
 - `manual-test`: `workflow_dispatch` → `gh pr list --author dependabot[bot]` → `gh pr merge --auto --rebase` (for testing `gh workflow run dependabot-auto-merge.yml`).
 
-Permissions `contents: write`, `pull-requests: write`, `allow_auto_merge: true` (rebase only). Fully autonomous `weekly: PR → CI → merge+release : assign`.
+Permissions `contents: write`, `pull-requests: write`, `allow_auto_merge: true` (rebase only). Fully autonomous `weekly: PR → CI → merge+dispatch+release : assign`.
+
+**Why `dispatch-release`:** `pull_request: closed` and `push` events triggered by `GITHUB_TOKEN` auto-merge are suppressed by GitHub (workflows triggered by `GITHUB_TOKEN` don't trigger new runs, except `workflow_dispatch`/`repository_dispatch`). Relying solely on `release.yml` `pull_request: closed` would never auto-release after `gh pr merge --auto` (observed in production: PR merged but no `Release` run). `dispatch-release` uses `workflow_dispatch` which *is* exempt, so `Release` is reliably dispatched. `pull_request: closed` remains as fallback for manual human merges (via UI/`PAT`/`ssh`).
 
 ### ci.yml
 
@@ -179,11 +183,12 @@ Weekly cadence makes full matrix acceptable (vs daily where single `ubuntu` chec
 
 ### release.yml
 
-**Trigger:** `workflow_dispatch` (manual `release_version` + `create_release`) OR `pull_request: types [closed], branches [main]`.
+**Trigger:** `workflow_dispatch` (manual `release_version` + `create_release`, `release_version` now optional `default: ""` for auto) OR `pull_request: types [closed], branches [main]` (fallback for manual merges).
 
 **Prepare job** only runs if `workflow_dispatch` OR (`pull_request.merged == true` AND `label dependencies`). Computes `version`:
-- Manual: use `inputs.release_version`.
-- Auto: `git describe --tags --abbrev=0` → `vMAJOR.MINOR.PATCH` → `PATCH+1` (or `0.1.0` if no tags).
+- Manual with `release_version` provided: use `inputs.release_version`.
+- Manual/dispatched without `release_version` (from `dispatch-release`): `git describe --tags --abbrev=0` → `vMAJOR.MINOR.PATCH` → `PATCH+1` (or `0.1.0` if no tags) — same as auto.
+- Auto (`pull_request`): `git describe --tags --abbrev=0` → `vMAJOR.MINOR.PATCH` → `PATCH+1` (or `0.1.0` if no tags).
 
 **Build job** needs `prepare`, matrix same as `ci.yml`, plus `Compress binaries` (`7z`/`tar.xz`) and `Upload artifact`.
 

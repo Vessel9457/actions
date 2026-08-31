@@ -12,16 +12,16 @@ Reusable GitHub Actions flow: **Weekly Update → PR with full-matrix CI gate �
 flowchart TD
     A[Dependabot<br/>weekly Mon 02:00<br/>dependabot.yml] -->|grouped PR| B[Pull Request]
     B --> C[CI Checks<br/>ci.yml<br/>Check + Build ×3]
-    C -->|all green, patch/minor| D[Auto-merge<br/>dependabot-auto-merge.yml<br/>rebase]
+    C -->|all green, patch/minor| D[Auto-merge + dispatch<br/>dependabot-auto-merge.yml<br/>rebase → workflow_dispatch]
     C -->|any red or major| E[Assigned to you<br/>human fix required]
     D --> F[Release<br/>release.yml<br/>patch bump + artifacts]
 ```
 
 * **Dependabot** creates/updates PRs (`gomod` + `npm` frontend, 1 per ecosystem, grouped `all-dependencies`, `cooldown: 14d`) weekly Mon 02:00, label `dependencies`, `assignees: [Delnegend]` (always), `ignore: typescript >=7.0.0` for TS6 hold. No local build validation — `ci.yml` full-matrix is the single gate (pure YAGNI).
-* **Dependabot auto-merge** (`dependabot-auto-merge.yml:1` `on: pull_request` + `workflow_dispatch`) gates `major` (`fetch-metadata@v2:1` `update-type != major`) and enables `gh pr merge --auto --rebase:1` for patch/minor when `actor == dependabot[bot]` + `label dependencies`; on red, PR stays open assigned to you (`weekly: update dependencies PR -> ci guards -> ok ? merge+release new version : assign me to the PR`).
+* **Dependabot auto-merge** (`dependabot-auto-merge.yml:1` `on: pull_request` + `workflow_dispatch`) gates `major` (`fetch-metadata@v2:1` `update-type != major`) and enables `gh pr merge --auto --rebase:1` for patch/minor when `actor == dependabot[bot]` + `label dependencies`; then `dispatch-release` polls until `MERGED` and `gh workflow run release.yml --ref main` (via `workflow_dispatch` — `GITHUB_TOKEN` `pull_request: closed`/`push` are suppressed after auto-merge, so `workflow_dispatch` is required). On red, PR stays open assigned to you (`weekly: update dependencies PR -> ci guards -> ok ? merge+dispatch+release new version : assign me to the PR`).
 * **CI** runs full matrix (`linux/amd64`, `darwin/universal`, `windows/amd64`) + `just check` on every PR to `main`. Weekly is cheap, so full matrix is acceptable.
 * **Branch protection** on `main` requires 4 checks + linear history. Only `Rebase and merge` is allowed, `allow_auto_merge: true:1` for Dependabot patch/minor.
-* **Release** runs only on `pull_request:closed` to `main` with `dependencies` label — auto patch bump (`v0.0.0` → `v0.1.0` → `v0.1.1` …) and `softprops/action-gh-release`.
+* **Release** runs on `workflow_dispatch` (dispatched by `dispatch-release` with auto patch bump, `release_version` optional) or `pull_request:closed` to `main` with `dependencies` label (fallback for manual merges) — auto patch bump (`v0.0.0` → `v0.1.0` → `v0.1.1` …) and `softprops/action-gh-release`.
 
 ## Quick Start (for humans)
 
@@ -53,8 +53,8 @@ git push
 |------|---------|---------|
 | `templates/ci.yml` | Full-matrix checks + `just check` | `pull_request` to `main`, `push` to `main` |
 | `templates/dependabot.yml` | Weekly grouped deps, 14d cooldown + TS6 ignore (`schedule` weekly Mon 02:00) | `dependabot` app |
-| `templates/dependabot-auto-merge.yml` | Auto-merge patch/minor (`fetch-metadata` gate, `gh pr merge --auto --rebase`) + manual test | `pull_request` + `workflow_dispatch` |
-| `templates/release.yml` | Cross-platform build + auto patch release | `pull_request:closed` to `main`, `workflow_dispatch` |
+| `templates/dependabot-auto-merge.yml` | Auto-merge patch/minor + dispatch Release (`fetch-metadata` gate, `gh pr merge --auto --rebase` → `gh workflow run release.yml`) | `pull_request` + `workflow_dispatch` |
+| `templates/release.yml` | Cross-platform build + auto patch release | `pull_request:closed` (fallback) + `workflow_dispatch` (primary via dispatch) |
 | `templates/package.json.overrides` | Bun `overrides` + comment for TS hold | Bun |
 
 See `AGENTS.md#detailed-flow` for detailed behavior.
