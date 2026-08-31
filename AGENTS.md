@@ -124,7 +124,7 @@ dependabot.yml ──grouped──► PR dependabot/* (label: dependencies, assi
                      ┌───────────┴───────────┐
                      │                       │
                   all green               any red or major
-                  patch/minor              │
+                  patch/minor                │
                      │                       ▼
                      ▼                Assigned to you
               Auto-merge                (human fix)
