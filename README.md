@@ -57,7 +57,7 @@ git push
 | `templates/release.yml` | Cross-platform build + auto patch release | `pull_request:closed` to `main`, `workflow_dispatch` |
 | `templates/package.json.overrides` | Bun `overrides` + comment for TS hold | Bun |
 
-See `docs/FLOW.md` for detailed behavior and `AGENTS.md` for AI agent instructions.
+See `AGENTS.md#detailed-flow` for detailed behavior.
 
 ## AI Agent Guide
 
