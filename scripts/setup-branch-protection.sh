@@ -13,7 +13,7 @@ fi
 
 if [[ -z "$REPO" ]]; then
   echo "Usage: $0 <owner/repo> [--dry-run]"
-  echo "Example: $0 Delnegend/gallery-preprocessor"
+  echo "Example: $0 Delnegend/your-repo"
   exit 1
 fi
 

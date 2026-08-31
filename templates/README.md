@@ -10,7 +10,7 @@ Copy these to your repo's `.github/workflows/` and customize `TODO` placeholders
 
 ## Customization Checklist
 
-1. **BINARY_NAME**: In `release.yml:22` `env.BINARY_NAME` and `ci.yml` artifact names, replace `gallery-preprocessor` with your repo name.
+1. **BINARY_NAME**: In `release.yml:22` `env.BINARY_NAME` and `ci.yml` artifact names, replace `your-app` with your repo name.
 2. **System deps**: In `ci.yml:27` and `weekly-update.yml:116`, adjust `libgtk-3-dev libwebkit2gtk-4.1-dev` to your needs (remove for non-Wails).
 3. **Build tags**: In `ci.yml:73` `wails build -tags webkit2_41` and `weekly-update.yml:135` `go build -tags`, adjust to your `-tags`.
 4. **justfile**: Ensure `just check` exists (`go fmt`, `go vet`, `oxlint`, `prettier`).

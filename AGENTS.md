@@ -29,7 +29,7 @@ Search for `TODO` or `BINARY_NAME` in the copied files:
 
 | Placeholder | Replace With | Example |
 |-------------|-------------|---------|
-| `BINARY_NAME` | Repo name / `wails.json:name` | `gallery-preprocessor` |
+| `BINARY_NAME` | Repo name / `wails.json:name` | `your-app` |
 | `BUN_MIN_RELEASE_AGE` / `GO_MIN_RELEASE_AGE` | Desired min-age (default `1209600` = 14d) | Keep or adjust |
 | `libgtk-3-dev libwebkit2gtk-4.1-dev` | Your system deps | Keep for Wails, remove for pure Go |
 | `just check` | Your `justfile` check recipe | `just check` or `go vet ./...` |
@@ -99,14 +99,14 @@ git push
 
 ## 7. Notes for AI
 
-- No local build gates in `weekly-update.yml` — `ci.yml` full-matrix is single gate (removed `Install system dependencies`/`Build frontend`/`Validate Go build`/`Build gate` per gallery-preprocessor fd4b2c5). Keep `if: always()` for `Open PR` only so PR still opens on updater failure.
+- No local build gates in `weekly-update.yml` — `ci.yml` full-matrix is single gate (removed `Install system dependencies`/`Build frontend`/`Validate Go build`/`Build gate`). Keep `if: always()` for `Open PR` only so PR still opens on updater failure.
 - Dual min-age: repo-level `frontend/bunfig.toml: [install] minimumReleaseAge = 1209600` (every `bun install`/`add`) + action-level `Delnegend/actions/go-min-age@v1` (proxy 14d, `go get -d` per-module) and `bun update --minimum-release-age`. CLI flags override `bunfig.toml`.
 - Weekly cadence = full matrix is acceptable (not daily).
 - Keep TS hold until `vuejs/language-tools#6124` closed and TS 7.1 API stable.
 - PRs via `peter-evans/create-pull-request@v8` with `GITHUB_TOKEN` show `action_required` for `ci.yml` `pull_request` — click **Approve and run** (keep `GITHUB_TOKEN`, weekly cadence = 1 click/week; PAT auto-run not needed).
-- Document all `BINARY_NAME` replacements; don't hardcode `gallery-preprocessor`.
+- Document all `BINARY_NAME` replacements; don't hardcode example names.
 
 ## References
 
-- Source: `Delnegend/gallery-preprocessor` (`main` branch, `weekly-update.yml:1`, `ci.yml:1`, `release.yml:1`)
 - Flow docs: `docs/FLOW.md`
+- Templates: `templates/ci.yml:1`, `templates/weekly-update.yml:1`, `templates/release.yml:1`, `go-min-age/action.yml:1`

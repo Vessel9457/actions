@@ -115,4 +115,4 @@ Effect: PR cannot be merged unless all 4 checks pass and branch is up-to-date; o
 
 ## History
 
-Extracted from `gallery-preprocessor` after fixing TS7 breakage (vue-tsc requires TS6 until 7.1, side-by-side `typescript: npm:@typescript/typescript6@6.0.2` + `@typescript/native: npm:typescript@7.0.2`, `overrides` hold).
+Extracted from a production Wails project after fixing TS7 breakage (vue-tsc requires TS6 until 7.1, side-by-side `typescript: npm:@typescript/typescript6@6.0.2` + `@typescript/native: npm:typescript@7.0.2`, `overrides` hold).

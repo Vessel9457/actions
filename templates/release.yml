@@ -19,7 +19,7 @@ on:
       - main
 
 env:
-  BINARY_NAME: gallery-preprocessor
+  BINARY_NAME: your-app
 
 jobs:
   prepare:

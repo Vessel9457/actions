@@ -1,5 +1,5 @@
 name: Go min-age update
-description: Update Go dependencies respecting minimum release age (via proxy.golang.org Time). Hoisted from gallery-preprocessor weekly-update.
+description: Update Go dependencies respecting minimum release age (via proxy.golang.org Time). Hoisted from weekly-update Go min-age logic.
 author: Delnegend
 
 inputs:
