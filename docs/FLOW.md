@@ -1,46 +1,58 @@
-# Flow — Weekly Update → PR → CI Gate → Release
+# Flow — Dependabot → PR → CI → Auto-merge → Release
 
-Detailed behavior of the three workflows and branch protection.
+Detailed behavior of the four workflows and branch protection.
 
 ## Overview
 
 ```
-Renovate (before 4am Mon, 14d, grouped)
+Dependabot (weekly Mon 02:00, 14d, grouped, assignees: Delnegend)
   │
   ▼
-renovate.json ──grouped──► PR chore/update-deps-all (label: dependencies)
+dependabot.yml ──grouped──► PR dependabot/* (label: dependencies, assignees: Delnegend)
+                                  │
+                                  ▼
+                               ci.yml (4 checks, full matrix)
                                  │
-                                 ▼
-                              ci.yml (4 checks, full matrix)
-                                │
-                    ┌───────────┴───────────┐
-                    │                       │
-                 all green               any red
-                    │                       │
-                    ▼                       ▼
-             Rebase & Merge            Blocked
-                    │               (human fix)
-                    ▼
-              release.yml
-             (patch bump)
-                    │
-                    ▼
-              GitHub Release
-              + artifacts
+                     ┌───────────┴───────────┐
+                     │                       │
+                  all green               any red or major
+                  patch/minor              │
+                     │                       ▼
+                     ▼                Assigned to you
+              Auto-merge                (human fix)
+              rebase (dependabot-auto-merge.yml)
+                     │
+                     ▼
+               release.yml
+              (patch bump)
+                     │
+                     ▼
+               GitHub Release
+               + artifacts
 ```
 
 ## dependabot.yml
 
-**Schedule:** `weekly` `day: monday` `time: "02:00"` (Mon 02:00 UTC), `cooldown: 14d` grouped `all-dependencies` → 1 PR per ecosystem (`gomod` + `npm` frontend).
+**Schedule:** `weekly` `day: monday` `time: "02:00"` (Mon 02:00 UTC), `cooldown: 14d` grouped `all-dependencies` → 1 PR per ecosystem (`gomod` + `npm` frontend), `assignees: [Delnegend]` (always).
 
 **Config** (`dependabot.yml:1` `version: 2`):
-- `labels: [dependencies]`, `commit-message: prefix: "chore(deps)"`, `groups: all-dependencies: patterns: ["*"]` (single PR per ecosystem, 2 PRs/week, `open-pull-requests-limit: 1`)
+- `labels: [dependencies]`, `assignees: [Delnegend]`, `commit-message: prefix: "chore(deps)"`, `groups: all-dependencies: patterns: ["*"]` (single PR per ecosystem, 2 PRs/week, `open-pull-requests-limit: 1`)
 - `ignore: typescript >=7.0.0` (TS6 hold, `vuejs/language-tools#6124`, `frontend/package.json:overrides` stays as stdlib safety net)
 - `cooldown: default-days: 14` for Go+Bun
 
 **Repo-level:** No `frontend/bunfig.toml` (pure YAGNI, deleted) — Dependabot `cooldown` is single source.
 
-**Flow:** Dependabot creates/updates `PR dependabot/*` (grouped, 14d) → `ci.yml` full-matrix single gate → `release.yml` auto patch on `label: dependencies` (label-only gate).
+**Flow:** Dependabot creates/updates `PR dependabot/*` (grouped, 14d, always `Delnegend`) → `ci.yml` full-matrix single gate → `dependabot-auto-merge.yml` auto-merge patch/minor or assign on major/red → `release.yml` auto patch on `label: dependencies`.
+
+## dependabot-auto-merge.yml
+
+**Trigger:** `pull_request: branches: [main]` (`actor == dependabot[bot]` + `label: dependencies`) + `workflow_dispatch: pr-number` (manual test).
+
+**Jobs:**
+- `automerge`: `dependabot/fetch-metadata@v2` `update-type` → `if: != major` → `gh pr merge --auto --rebase` (patch/minor auto, major held for human).
+- `manual-test`: `workflow_dispatch` → `gh pr list --author dependabot[bot]` → `gh pr merge --auto --rebase` (for testing `gh workflow run dependabot-auto-merge.yml`).
+
+Permissions `contents: write`, `pull-requests: write`, `allow_auto_merge: true` (rebase only). Fully autonomous `weekly: PR → CI → merge+release : assign`.
 
 ## ci.yml
 
@@ -81,14 +93,15 @@ Set on `main`:
   },
   "required_linear_history": true,
   "allow_force_pushes": false,
-  "allow_deletions": false
+  "allow_deletions": false,
+  "allow_auto_merge": true
 }
 ```
 
 And repo settings:
 
 ```json
-{"allow_rebase_merge": true, "allow_squash_merge": false, "allow_merge_commit": false}
+{"allow_rebase_merge": true, "allow_squash_merge": false, "allow_merge_commit": false, "allow_auto_merge": true}
 ```
 
 Effect: PR cannot be merged unless all 4 checks pass and branch is up-to-date; only `Rebase and merge` button is enabled.
@@ -96,7 +109,7 @@ Effect: PR cannot be merged unless all 4 checks pass and branch is up-to-date; o
 ## Customization
 
 - Change `BINARY_NAME` in `release.yml:22` and `ci.yml` artifact names.
-- Change `BUN_MIN_RELEASE_AGE`/`GO_MIN_RELEASE_AGE` to adjust min-age.
+- Change `cooldown` in `dependabot.yml` (`default-days: 14`) to adjust min-age.
 - Replace `just check` with your own `check` recipe or inline `go vet`/`oxlint`.
 - For non-Wails projects, remove `libgtk`/`webkit` and `wails` steps, keep `go build`/`bun run build`.
 

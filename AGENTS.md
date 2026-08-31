@@ -15,6 +15,7 @@ This template implements the **Dependabot → PR with CI Gate → Rebase & Merge
 cp actions/templates/ci.yml .github/workflows/ci.yml
 cp actions/templates/release.yml .github/workflows/release.yml
 cp actions/templates/dependabot.yml .github/dependabot.yml
+cp actions/templates/dependabot-auto-merge.yml .github/workflows/dependabot-auto-merge.yml
 
 # Ensure dirs exist
 mkdir -p .github/workflows
@@ -43,7 +44,7 @@ Also:
 ## 3. Validate YAML
 
 ```bash
-python3 -c "import yaml, pathlib; [yaml.safe_load(open(f)) for f in ['.github/workflows/ci.yml', '.github/workflows/release.yml', '.github/dependabot.yml']]; print('yaml valid')"
+python3 -c "import yaml, pathlib; [yaml.safe_load(open(f)) for f in ['.github/workflows/ci.yml', '.github/workflows/release.yml', '.github/workflows/dependabot-auto-merge.yml', '.github/dependabot.yml']]; print('yaml valid')"
 python3 -m json.tool frontend/package.json > /dev/null && echo "json valid"
 ```
 
@@ -78,11 +79,11 @@ gh api repos/Delnegend/<repo> -X PATCH -f allow_rebase_merge=true -f allow_squas
 ## 5. Commit & Push
 
 ```bash
-git add .github/workflows/ci.yml .github/workflows/release.yml .github/dependabot.yml frontend/package.json
+git add .github/workflows/ci.yml .github/workflows/release.yml .github/workflows/dependabot-auto-merge.yml .github/dependabot.yml frontend/package.json
 git commit -m "ci: add dependabot→PR→CI→release flow from actions template
 
-- dependabot 14d cooldown grouped PR (gomod + npm) on schedule weekly Mon 02:00
-- CI gates merge (rebase only)
+- dependabot 14d cooldown grouped PR (gomod + npm) on schedule weekly Mon 02:00, assignees Delnegend, auto-merge patch/minor via dependabot-auto-merge.yml
+- CI gates merge (rebase only, allow_auto_merge)
 - TS6 hold for vue-tsc until TS7.1"
 git push
 ```
