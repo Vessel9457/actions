@@ -3,7 +3,8 @@ description: Dispatch the GitHub twin's workflow and wait for it (Forgejo → Gi
 
 # The GitHub repository is resolved as <gh_owner>/<repo>, where <repo> is THIS
 # repository's name (from GITHUB_REPOSITORY). The two repos must therefore have
-# identical names — only the owner differs.
+# identical names — only the owner differs. The workflow file dispatched is
+# named after the calling workflow (event == workflow name == file name).
 inputs:
   gh_token:
     description: GitHub token with Actions read/write (e.g. secrets.GH_ACTIONS)
@@ -12,6 +13,10 @@ inputs:
     description: Owner of the public GitHub mirror
     required: false
     default: Vessel9457
+  gh_ref:
+    description: Ref of the twin that holds the workflow file
+    required: false
+    default: main
   ref:
     description: Commit SHA (or ref) to build; defaults to the caller's SHA
     required: false
@@ -33,6 +38,7 @@ runs:
       env:
         GH_TOKEN: ${{ inputs.gh_token }}
         GH_OWNER: ${{ inputs.gh_owner }}
+        GH_REF: ${{ inputs.gh_ref }}
         REF: ${{ inputs.ref }}
         DOWNLOAD: ${{ inputs.download }}
         ARTIFACTS_DIR: ${{ inputs.artifacts_dir }}
@@ -46,36 +52,33 @@ runs:
         CID="${GITHUB_REPOSITORY//\//-}-${SRC_SHA:0:12}-$(date +%s)-${RANDOM}"
         echo "-> ${GH_REPO} [${EVENT}]  correlation id: $CID"
 
-        # 1. Dispatch.
-        jq -n --arg e "$EVENT" --arg ref "$SRC_SHA" --arg cid "$CID" \
-          '{event_type: $e, client_payload: {ref: $ref, correlation_id: $cid}}' \
-        | gh api --method POST "repos/${GH_REPO}/dispatches" --input -
+        # 1. Dispatch. `workflow_dispatch` returns the run id (API 2026-03-10+),
+        #    so there is nothing to poll for.
+        RESP="$(jq -n --arg ref "$GH_REF" --arg r "$SRC_SHA" --arg cid "$CID" \
+          '{ref: $ref, inputs: {ref: $r, correlation_id: $cid}}' \
+          | gh api --method POST -H 'X-GitHub-Api-Version: 2026-03-10' \
+              "repos/${GH_REPO}/actions/workflows/${EVENT}.yaml/dispatches" --input -)"
 
-        # 2. Resolve the run id (dispatch has no return value).
-        RUN_ID=""
-        for _ in $(seq 1 60); do
-          RUN_ID="$(gh run list --repo "$GH_REPO" --event repository_dispatch --limit 50 \
-            --json databaseId,displayTitle \
-            --jq ".[] | select(.displayTitle | endswith(\"$CID\")) | .databaseId" | head -1)"
-          [ -n "$RUN_ID" ] && break
-          sleep 10
-        done
-        [ -n "$RUN_ID" ] || { echo "::error::no GitHub run found for $CID"; exit 1; }
+        RUN_ID="$(jq -r '.workflow_run_id // empty' <<<"$RESP")"
+        [ -n "$RUN_ID" ] || {
+          echo "::error::dispatch returned no workflow_run_id: ${RESP}"
+          exit 1
+        }
         echo "github run: $RUN_ID"
 
-        # 3. Stay alive for the whole run; capture its conclusion.
+        # 2. Stay alive for the whole run; capture its conclusion.
         RC=0
         gh run watch "$RUN_ID" --repo "$GH_REPO" --exit-status --interval 30 || RC=$?
         [ "$RC" -eq 0 ] || gh run view "$RUN_ID" --repo "$GH_REPO" --log-failed || true
 
-        # 4. Pull artifacts (on success) before scrubbing the public run.
+        # 3. Pull artifacts (on success) before scrubbing the public run.
         if [ "$RC" -eq 0 ] && [ "$DOWNLOAD" = "true" ]; then
           rm -rf "$ARTIFACTS_DIR"
           mkdir -p "$ARTIFACTS_DIR"
           gh run download "$RUN_ID" --repo "$GH_REPO" --dir "$ARTIFACTS_DIR"
         fi
 
-        # 5. Scrub the public run (logs + artifacts).
+        # 4. Scrub the public run (logs + artifacts).
         gh run delete "$RUN_ID" --repo "$GH_REPO" || true
 
         exit "$RC"
