@@ -11,7 +11,7 @@ pattern — the GitHub twin's own README stays minimal on purpose.
 ```
 push to Forgejo (Delnegend/<repo>)
   └─ .forgejo/workflows/<name>.yaml                       (private, source of truth)
-       └─ uses: …/actions/dispatch-github@v1
+       └─ uses: …/actions/dispatch-github@v2
             └─ gh api dispatches event_type=<name> ─────▶ Vessel9457/<repo>
                  ▲                                        .github/workflows/<name>.yaml
                  │                                        (public twin, no source)
@@ -73,7 +73,7 @@ jobs:
     runs-on: alpine
     steps:
       - name: Dispatch to Github
-        uses: https://git.delnegend.com/Delnegend/actions/dispatch-github@v1
+        uses: https://git.delnegend.com/Delnegend/actions/dispatch-github@v2
         with:
           gh_token: ${{ secrets.GH_ACTIONS }}
 ```
@@ -99,7 +99,7 @@ jobs:
     runs-on: alpine
     steps:
       - name: Dispatch to Github
-        uses: https://git.delnegend.com/Delnegend/actions/dispatch-github@v1
+        uses: https://git.delnegend.com/Delnegend/actions/dispatch-github@v2
         with:
           gh_token: ${{ secrets.GH_ACTIONS }}
           download: true
@@ -186,9 +186,13 @@ jobs:
 
 ### `.github/workflows/release.yaml` — batched release
 
-Version comes from the **source repo's** `v*` tags (the Forgejo action creates
-them when it publishes), so the workflow clones Forgejo with tags; it does not
-publish anything itself. The project-specific build/packaging is marked.
+The version comes from the **source repo's Conventional Commits** since the last
+release, computed by
+[`ietf-tools/semver-action`](https://github.com/ietf-tools/semver-action): the
+source is cloned, its commit subjects are fed through `additionalCommits`, and
+the twin's own `v*` tags record what has been released (bootstrap: create a
+`v0.0.0` tag once). The workflow builds the artifact and tags itself with the new
+version; the Forgejo action does the publishing. Nothing is published publicly.
 
 ```yaml
 name: release
@@ -199,50 +203,22 @@ on:
   workflow_dispatch:
     inputs:
       ref: { required: false, default: main }
-      release_version: { required: false, type: string, default: "" }
       correlation_id: { required: false }
+
 run-name: "release ${{ inputs.correlation_id || github.sha }}"
 concurrency:
   group: release-main
   cancel-in-progress: false
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   prepare:
     name: Prepare
     runs-on: ubuntu-slim
-    outputs: { version: ${{ steps.version.outputs.version }}, skip: ${{ steps.version.outputs.skip }} }
-    steps:
-      - name: Fetch source and tags from Forgejo
-        env:
-          TOKEN: ${{ secrets.FORGEJO }}
-          REF: ${{ inputs.ref || 'main' }}
-        run: |
-          set -euo pipefail
-          REPO="${GITHUB_REPOSITORY#*/}"
-          git clone --quiet "https://oauth2:${TOKEN}@git.delnegend.com/Delnegend/${REPO}.git" src
-          git -C src checkout --quiet "$REF"
-      - name: Determine version and whether to release
-        id: version
-        run: |
-          set -euo pipefail
-          EXPLICIT="${{ inputs.release_version }}"
-          if [ -n "$EXPLICIT" ]; then echo "version=${EXPLICIT#v}" >> "$GITHUB_OUTPUT"; echo "skip=false" >> "$GITHUB_OUTPUT"; exit 0; fi
-          LATEST="$(git -C src describe --tags --match 'v*' --abbrev=0 2>/dev/null || echo 'v0.0.0')"
-          [ "$LATEST" = "v0.0.0" ] && COUNT="$(git -C src rev-list --count HEAD)" || COUNT="$(git -C src rev-list "${LATEST}..HEAD" --count)"
-          if [ "$COUNT" -eq 0 ]; then echo "skip=true" >> "$GITHUB_OUTPUT"; echo "version=${LATEST#v}" >> "$GITHUB_OUTPUT"; exit 0; fi
-          if [ "$LATEST" = "v0.0.0" ]; then NEXT="0.1.0"; else
-            RAW="${LATEST#v}"; IFS='.' read -r major minor patch <<< "$RAW"
-            NEXT="${major:-0}.${minor:-0}.$(( ${patch:-0} + 1 ))"
-          fi
-          echo "version=$NEXT" >> "$GITHUB_OUTPUT"; echo "skip=false" >> "$GITHUB_OUTPUT"
-
-  build:
-    name: Build
-    needs: prepare
-    if: needs.prepare.outputs.skip != 'true'
-    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.semver.outputs.nextStrict }}
+      skip: ${{ steps.changes.outputs.skip }}
     steps:
       - name: Fetch source from Forgejo
         env:
@@ -251,16 +227,47 @@ jobs:
         run: |
           set -euo pipefail
           REPO="${GITHUB_REPOSITORY#*/}"
-          git clone "https://oauth2:${TOKEN}@git.delnegend.com/Delnegend/${REPO}.git" .
-          git checkout "$REF"
-      # … project build, then:
+          git clone --quiet "https://oauth2:${TOKEN}@git.delnegend.com/Delnegend/${REPO}.git" src
+          git -C src checkout --quiet "$REF"
+      - name: Collect source commits since the last release
+        id: changes
+        run: |
+          set -euo pipefail
+          LAST="$(git -C src describe --tags --match 'v*' --abbrev=0 2>/dev/null || true)"
+          if [ -n "$LAST" ]; then RANGE="${LAST}..HEAD"; else RANGE="HEAD"; fi
+          COUNT="$(git -C src rev-list --count "$RANGE")"
+          if [ "$COUNT" -eq 0 ]; then echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          { echo 'messages<<EOF'; git -C src log --pretty=format:%s "$RANGE"; echo; echo 'EOF'; } >> "$GITHUB_OUTPUT"
+      - name: Next version
+        id: semver
+        if: steps.changes.outputs.skip != 'true'
+        uses: ietf-tools/semver-action@v1
+        with:
+          token: ${{ github.token }}
+          fallbackTag: v0.0.0
+          additionalCommits: ${{ steps.changes.outputs.messages }}
+          noVersionBumpBehavior: patch
+
+  build:
+    name: Build
+    needs: prepare
+    if: needs.prepare.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      # … fetch source, toolchain, build, package <prefix>-<version>-linux-musl.tar.gz
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: <repo>-<target>
+          name: <repo>-linux-musl
           path: <artifact>
           if-no-files-found: error
           retention-days: 1
+      - name: Mark the version as released
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: v${{ needs.prepare.outputs.version }}
+        run: gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" -f ref="refs/tags/${VERSION}" -f sha="${GITHUB_SHA}"
 ```
 
 ### `.github/workflows/cleanup.yaml` — privacy backstop
@@ -298,11 +305,11 @@ The Forgejo runner's job container needs `gh`, `jq`, `git`, `curl` and `bash`
 ## Adopting for a new repo
 
 1. Create the public GitHub twin `Vessel9457/<repo>` (name must match) with the
-   three workflows above.
+   three workflows above, and create a bootstrap `v0.0.0` tag on it.
 2. Twin secrets: `FORGEJO` (read-only PAT) + any build-time secrets.
 3. Forgejo repo secret: `GH_ACTIONS` (Actions + Contents read/write on the twin).
 4. Add `.forgejo/workflows/<name>.yaml` per GitHub workflow, same file name, one
-   `dispatch-github@v1` step.
+   `dispatch-github@v2` step.
 5. Push, or run the release action manually.
 
 ## Versioning
