@@ -35,20 +35,24 @@ push to Forgejo (Delnegend/<repo>)
 ## `dispatch-github`
 
 A composite action — plain shell, **no Node/checkout needed**. It dispatches the
-twin's workflow, resolves the run, waits for it, optionally downloads the
-artifacts, and always deletes the public run. It exits non-zero if the GitHub run
-fails, so the Forgejo job mirrors the result.
+twin's workflow via `workflow_dispatch` (whose response carries the run id, so
+there is **no polling**), waits for it, optionally downloads the artifacts, and
+always deletes the public run. It exits non-zero if the GitHub run fails, so the
+Forgejo job mirrors the result. It dispatches `<event>.yaml`, so the calling
+workflow's name must match the twin's file name.
 
 | Input | Default | Description |
 |---|---|---|
 | `gh_token` | — | GitHub token with Actions read/write (**required**) |
 | `gh_owner` | `Vessel9457` | Owner of the public GitHub mirror |
+| `gh_ref` | `main` | Twin ref holding the workflow file |
 | `ref` | caller's `GITHUB_SHA` | Commit/SHA to build |
 | `download` | `false` | Download artifacts before deleting the run |
 | `artifacts_dir` | `dist` | Destination for `download` |
 
 The event is taken from the calling workflow's name, and the repo from
-`GITHUB_REPOSITORY` — so neither is configured per call.
+`GITHUB_REPOSITORY` — so neither is configured per call. The dispatched run's id
+comes back in the response (`workflow_run_id`), so it is watched directly.
 
 ### Forgejo caller — CI
 
@@ -134,11 +138,10 @@ jobs:
 
 ## The GitHub twin
 
-A public repo with the same name, holding only workflows. Both
-`repository_dispatch` (the Forgejo trigger) and `workflow_dispatch` (manual) are
-wired; the run echoes the caller's `correlation_id` in `run-name`, which is what
-`dispatch-github` matches on. Source is always cloned from Forgejo with
-`secrets.FORGEJO`.
+A public repo with the same name, holding only workflows. It exposes
+`workflow_dispatch` (used by both the action and manual runs); the run echoes the
+caller's `correlation_id` in `run-name` for observability. Source is always
+cloned from Forgejo with `secrets.FORGEJO`.
 
 ### `.github/workflows/ci.yaml` — the check gate
 
@@ -146,14 +149,12 @@ wired; the run echoes the caller's `correlation_id` in `run-name`, which is what
 name: ci
 
 on:
-  repository_dispatch:
-    types: [ci]
   workflow_dispatch:
     inputs:
       ref: { required: false, default: main }
       correlation_id: { required: false }
 
-run-name: "ci ${{ github.event.client_payload.correlation_id || inputs.correlation_id || github.sha }}"
+run-name: "ci ${{ inputs.correlation_id || github.sha }}"
 
 permissions:
   contents: read
@@ -170,7 +171,7 @@ jobs:
       - name: Fetch source from Forgejo
         env:
           TOKEN: ${{ secrets.FORGEJO }}
-          REF: ${{ github.event.client_payload.ref || inputs.ref || 'main' }}
+          REF: ${{ inputs.ref || 'main' }}
         run: |
           set -euo pipefail
           REPO="${GITHUB_REPOSITORY#*/}"
@@ -200,10 +201,7 @@ on:
       ref: { required: false, default: main }
       release_version: { required: false, type: string, default: "" }
       correlation_id: { required: false }
-  repository_dispatch:
-    types: [release]
-
-run-name: "release ${{ github.event.client_payload.correlation_id || inputs.correlation_id || github.sha }}"
+run-name: "release ${{ inputs.correlation_id || github.sha }}"
 concurrency:
   group: release-main
   cancel-in-progress: false
@@ -219,7 +217,7 @@ jobs:
       - name: Fetch source and tags from Forgejo
         env:
           TOKEN: ${{ secrets.FORGEJO }}
-          REF: ${{ github.event.client_payload.ref || inputs.ref || 'main' }}
+          REF: ${{ inputs.ref || 'main' }}
         run: |
           set -euo pipefail
           REPO="${GITHUB_REPOSITORY#*/}"
@@ -249,7 +247,7 @@ jobs:
       - name: Fetch source from Forgejo
         env:
           TOKEN: ${{ secrets.FORGEJO }}
-          REF: ${{ github.event.client_payload.ref || inputs.ref || 'main' }}
+          REF: ${{ inputs.ref || 'main' }}
         run: |
           set -euo pipefail
           REPO="${GITHUB_REPOSITORY#*/}"
@@ -309,4 +307,5 @@ The Forgejo runner's job container needs `gh`, `jq`, `git`, `curl` and `bash`
 
 ## Versioning
 
-Pin `@v1`. Non-breaking fixes move the `v1` tag; breaking changes cut `v2`.
+Pin `@v2`. `v1` was the `repository_dispatch` era; from `v2` on, tags are
+immutable (cut `v3` for breaking changes).
