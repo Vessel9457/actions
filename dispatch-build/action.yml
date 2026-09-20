@@ -1,0 +1,81 @@
+name: dispatch-build
+description: Dispatch the GitHub twin's workflow and wait for it (Forgejo → GitHub Actions)
+
+# The GitHub repository is resolved as <gh_owner>/<repo>, where <repo> is THIS
+# repository's name (from GITHUB_REPOSITORY). The two repos must therefore have
+# identical names — only the owner differs.
+inputs:
+  gh_token:
+    description: GitHub token with Actions read/write (e.g. secrets.GH_ACTIONS)
+    required: true
+  gh_owner:
+    description: Owner of the public GitHub mirror
+    required: false
+    default: Vessel9457
+  ref:
+    description: Commit SHA (or ref) to build; defaults to the caller's SHA
+    required: false
+    default: ""
+  download:
+    description: Download the run's artifacts before deleting it
+    required: false
+    default: "false"
+  artifacts_dir:
+    description: Destination directory for `download`
+    required: false
+    default: dist
+
+runs:
+  using: composite
+  steps:
+    - name: Dispatch and wait
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.gh_token }}
+        GH_OWNER: ${{ inputs.gh_owner }}
+        REF: ${{ inputs.ref }}
+        DOWNLOAD: ${{ inputs.download }}
+        ARTIFACTS_DIR: ${{ inputs.artifacts_dir }}
+      run: |
+        set -euo pipefail
+
+        # <gh_owner>/<this repo's name>; event = the calling workflow's name.
+        GH_REPO="${GH_OWNER}/${GITHUB_REPOSITORY#*/}"
+        EVENT="${GITHUB_WORKFLOW:?name the calling workflow after the event}"
+        SRC_SHA="${REF:-$GITHUB_SHA}"
+        CID="${GITHUB_REPOSITORY//\//-}-${SRC_SHA:0:12}-$(date +%s)-${RANDOM}"
+        echo "-> ${GH_REPO} [${EVENT}]  correlation id: $CID"
+
+        # 1. Dispatch.
+        jq -n --arg e "$EVENT" --arg ref "$SRC_SHA" --arg cid "$CID" \
+          '{event_type: $e, client_payload: {ref: $ref, correlation_id: $cid}}' \
+        | gh api --method POST "repos/${GH_REPO}/dispatches" --input -
+
+        # 2. Resolve the run id (dispatch has no return value).
+        RUN_ID=""
+        for _ in $(seq 1 60); do
+          RUN_ID="$(gh run list --repo "$GH_REPO" --event repository_dispatch --limit 50 \
+            --json databaseId,displayTitle \
+            --jq ".[] | select(.displayTitle | endswith(\"$CID\")) | .databaseId" | head -1)"
+          [ -n "$RUN_ID" ] && break
+          sleep 10
+        done
+        [ -n "$RUN_ID" ] || { echo "::error::no GitHub run found for $CID"; exit 1; }
+        echo "github run: $RUN_ID"
+
+        # 3. Stay alive for the whole run; capture its conclusion.
+        RC=0
+        gh run watch "$RUN_ID" --repo "$GH_REPO" --exit-status --interval 30 || RC=$?
+        [ "$RC" -eq 0 ] || gh run view "$RUN_ID" --repo "$GH_REPO" --log-failed || true
+
+        # 4. Pull artifacts (on success) before scrubbing the public run.
+        if [ "$RC" -eq 0 ] && [ "$DOWNLOAD" = "true" ]; then
+          rm -rf "$ARTIFACTS_DIR"
+          mkdir -p "$ARTIFACTS_DIR"
+          gh run download "$RUN_ID" --repo "$GH_REPO" --dir "$ARTIFACTS_DIR"
+        fi
+
+        # 5. Scrub the public run (logs + artifacts).
+        gh run delete "$RUN_ID" --repo "$GH_REPO" || true
+
+        exit "$RC"

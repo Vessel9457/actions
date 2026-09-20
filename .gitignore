@@ -1,9 +1,0 @@
-.devenv/
-.direnv/
-node_modules/
-dist/
-build/bin
-*.log
-.env
-result
-result-*
