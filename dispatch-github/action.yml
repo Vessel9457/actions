@@ -1,4 +1,4 @@
-name: dispatch-build
+name: dispatch-github
 description: Dispatch the GitHub twin's workflow and wait for it (Forgejo → GitHub Actions)
 
 # The GitHub repository is resolved as <gh_owner>/<repo>, where <repo> is THIS

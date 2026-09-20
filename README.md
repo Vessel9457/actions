@@ -10,7 +10,7 @@ and wait for the result.
 ```
 push to Forgejo (Delnegend/<repo>)
   └─ .forgejo/workflows/<name>.yaml                      (private, source of truth)
-       └─ uses: …/actions/dispatch-build@v1
+       └─ uses: …/actions/dispatch-github@v1
             └─ gh api dispatches event_type=<name> ─────▶ .github/workflows/<name>.yaml
                  ▲                                          (public twin, no source)
                  │                                          ├─ clone Forgejo (secrets.FORGEJO)
@@ -32,7 +32,7 @@ push to Forgejo (Delnegend/<repo>)
   run (logs + artifacts). A scheduled `cleanup` workflow on the GitHub side is
   the backstop.
 
-## `dispatch-build`
+## `dispatch-github`
 
 Composite action; runs with plain shell (no Node/checkout needed). It dispatches
 the twin's workflow, resolves the run, waits for it, optionally downloads the
@@ -59,7 +59,7 @@ jobs:
   github:
     runs-on: alpine
     steps:
-      - uses: https://git.delnegend.com/Delnegend/actions/dispatch-build@v1
+      - uses: https://git.delnegend.com/Delnegend/actions/dispatch-github@v1
         with:
           gh_token: ${{ secrets.GH_ACTIONS }}
 ```
@@ -80,7 +80,7 @@ jobs:
   github:
     runs-on: alpine
     steps:
-      - uses: https://git.delnegend.com/Delnegend/actions/dispatch-build@v1
+      - uses: https://git.delnegend.com/Delnegend/actions/dispatch-github@v1
         with:
           gh_token: ${{ secrets.GH_ACTIONS }}
           download: true
