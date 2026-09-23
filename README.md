@@ -210,20 +210,51 @@ without rebuilding the URL.
     persist_credentials: true # later steps push via `origin`
 ```
 
-### GitHub twin — clone the Forgejo source
+### GitHub twin — cannot use this action
 
-The twin's own name differs only by owner, so pass the Forgejo `repository`
-explicitly:
+**GitHub's runner does not support URL-form `uses:`.** It resolves only
+`{owner}/{repo}@{ref}`, `./local/path`, and `docker://{image}`. A
+`uses: https://git.delnegend.com/...` is parsed as `owner/repo` and fails with:
+
+```
+Error: Unable to resolve action https:/git.delnegend.com, repository not found
+```
+
+The `https://host/owner/repo@ref` form is a **Forgejo/Gitea extension** — it
+works in `.forgejo/workflows/*.yaml` only. So the twin's jobs clone the Forgejo
+source with an inline shell step instead:
 
 ```yaml
 - name: Fetch source from Forgejo
-  uses: https://git.delnegend.com/Delnegend/actions/checkout@v2
-  with:
-    token: ${{ secrets.FORGEJO }}
-    repository: ${{ env.FJ_OWNER }}/${{ github.event.repository.name }}
-    server_url: https://${{ env.FJ_HOST }}
-    ref: ${{ inputs.ref || 'main' }}
+  env:
+    TOKEN: ${{ secrets.FORGEJO }}
+    REF: ${{ inputs.ref || 'main' }}
+  run: |
+    set -euo pipefail
+    REPO="${GITHUB_REPOSITORY#*/}"
+    CLONE_URL="https://oauth2:${TOKEN}@${FJ_HOST}/${FJ_OWNER}/${REPO}.git"
+    for i in 1 2 3 4 5; do
+      find . -mindepth 1 -delete
+      if git clone "$CLONE_URL" .; then break; fi
+      if [ "$i" -eq 5 ]; then
+        echo "::error::git clone failed after 5 attempts"; exit 1
+      fi
+      echo "git clone failed (attempt $i), retrying in $((i * 3))s..."
+      sleep $((i * 3))
+    done
+    git remote set-url origin "https://${FJ_HOST}/${FJ_OWNER}/${REPO}.git"
+    git checkout "$REF"
 ```
+
+The retry loop is deliberate: GitHub runners reach the Forgejo host over the
+public internet, which returns intermittent Cloudflare `520`s.
+
+### Where each form is legal
+
+| Workflow | `uses:` form | Example |
+|---|---|---|
+| `.forgejo/workflows/*` | URL **or** shorthand | `https://git.delnegend.com/Delnegend/actions/checkout@v2` |
+| `.github/workflows/*` | shorthand only | `dtolnay/rust-toolchain@master` |
 
 ## The automatic token
 
