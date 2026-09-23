@@ -45,7 +45,7 @@ outputs:
     description: Type of bump applied (major, minor, patch, none)
     value: ${{ steps.calc.outputs.bump }}
   skip:
-    description: 'true' if no new commits exist since latest tag or bump is none
+    description: "Whether no new commits exist since the latest tag, or no bump applies (true/false)"
     value: ${{ steps.calc.outputs.skip }}
   commits_count:
     description: Number of commits evaluated since the latest tag

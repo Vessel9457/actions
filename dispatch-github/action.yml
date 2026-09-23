@@ -9,6 +9,14 @@ inputs:
   gh_token:
     description: GitHub token with Actions read/write (e.g. secrets.GH_ACTIONS)
     required: true
+  event:
+    description: >-
+      Workflow name to dispatch on the twin (== its file name). Defaults to the
+      calling workflow's name. Set this explicitly when the caller must dispatch
+      a DIFFERENT workflow: `GITHUB_WORKFLOW` is read-only, so a step-level
+      `env:` cannot override it.
+    required: false
+    default: ""
   gh_owner:
     description: Owner of the public GitHub mirror
     required: false
@@ -37,6 +45,7 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.gh_token }}
+        EVENT_INPUT: ${{ inputs.event }}
         GH_OWNER: ${{ inputs.gh_owner }}
         GH_REF: ${{ inputs.gh_ref }}
         REF: ${{ inputs.ref }}
@@ -47,7 +56,7 @@ runs:
 
         # <gh_owner>/<this repo's name>; event = the calling workflow's name.
         GH_REPO="${GH_OWNER}/${GITHUB_REPOSITORY#*/}"
-        EVENT="${GITHUB_WORKFLOW:?name the calling workflow after the event}"
+        EVENT="${EVENT_INPUT:-${GITHUB_WORKFLOW:?name the calling workflow after the event}}"
         SRC_SHA="${REF:-$GITHUB_SHA}"
         CID="${GITHUB_REPOSITORY//\//-}-${SRC_SHA:0:12}-$(date +%s)-${RANDOM}"
         echo "-> ${GH_REPO} [${EVENT}]  correlation id: $CID"

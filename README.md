@@ -44,15 +44,19 @@ workflow's name must match the twin's file name.
 | Input | Default | Description |
 |---|---|---|
 | `gh_token` | — | GitHub token with Actions read/write (**required**) |
+| `event` | caller's `GITHUB_WORKFLOW` | Twin workflow to dispatch (`<event>.yaml`) |
 | `gh_owner` | `Vessel9457` | Owner of the public GitHub mirror |
 | `gh_ref` | `main` | Twin ref holding the workflow file |
 | `ref` | caller's `GITHUB_SHA` | Commit/SHA to build |
 | `download` | `false` | Download artifacts before deleting the run |
 | `artifacts_dir` | `dist` | Destination for `download` |
 
-The event is taken from the calling workflow's name, and the repo from
-`GITHUB_REPOSITORY` — so neither is configured per call. The dispatched run's id
-comes back in the response (`workflow_run_id`), so it is watched directly.
+By default the event is the calling workflow's name and the repo comes from
+`GITHUB_REPOSITORY` — so neither is configured per call. **When a caller must
+dispatch a different workflow than itself, pass `event:` explicitly**:
+`GITHUB_WORKFLOW` is a read-only default variable and a step-level `env:` cannot
+override it. The dispatched run's id comes back in the response
+(`workflow_run_id`), so it is watched directly.
 
 ### Forgejo caller — CI
 
