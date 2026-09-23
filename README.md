@@ -128,6 +128,42 @@ jobs:
           done
 ```
 
+## `semver`
+
+A composite action — plain shell & Git, **no Node, Octokit, or external API tokens
+needed**. Calculates the next release version from Conventional Commits (`feat:`,
+`fix:`, `feat!:`, `BREAKING CHANGE:`) since the latest SemVer Git tag.
+
+| Input | Default | Description |
+|---|---|---|
+| `path` | `.` | Working directory / path to git repository |
+| `prefix` | `v` | Prefix for version tags (e.g. `v`) |
+| `fallback_version` | `0.1.0` | Initial SemVer version if no tags exist |
+| `no_version_bump_behavior` | `patch` | Bump behavior if commits exist but none trigger minor/major (`patch`, `current`, `none`) |
+
+| Output | Example | Description |
+|---|---|---|
+| `current` | `v0.1.0` | Latest tag found |
+| `current_strict` | `0.1.0` | Latest version without prefix |
+| `next` | `v0.2.0` | Next calculated tag with prefix |
+| `next_strict` | `0.2.0` | Next calculated version without prefix |
+| `major` | `0` | Next major version number |
+| `minor` | `2` | Next minor version number |
+| `patch` | `0` | Next patch version number |
+| `bump` | `minor` | Bump type (`major`, `minor`, `patch`, `none`) |
+| `skip` | `false` | `true` if no commits exist since latest tag |
+| `commits_count` | `8` | Number of commits in range |
+
+### Forgejo caller — bump-version
+
+```yaml
+- name: Calculate Next SemVer
+  id: semver
+  uses: https://git.delnegend.com/Delnegend/actions/semver@v2
+  with:
+    fallback_version: 0.1.0
+```
+
 ## Secrets
 
 | Repo | Secret | Value |
