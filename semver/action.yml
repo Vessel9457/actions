@@ -22,29 +22,40 @@ inputs:
 outputs:
   current:
     description: Latest tag/version found (e.g. 'v0.1.0')
+    value: ${{ steps.calc.outputs.current }}
   current_strict:
     description: Latest version without prefix (e.g. '0.1.0')
+    value: ${{ steps.calc.outputs.current_strict }}
   next:
     description: Next calculated version with prefix (e.g. 'v0.2.0')
+    value: ${{ steps.calc.outputs.next }}
   next_strict:
     description: Next calculated version without prefix (e.g. '0.2.0')
+    value: ${{ steps.calc.outputs.next_strict }}
   major:
     description: Next major version number
+    value: ${{ steps.calc.outputs.major }}
   minor:
     description: Next minor version number
+    value: ${{ steps.calc.outputs.minor }}
   patch:
     description: Next patch version number
+    value: ${{ steps.calc.outputs.patch }}
   bump:
     description: Type of bump applied (major, minor, patch, none)
+    value: ${{ steps.calc.outputs.bump }}
   skip:
     description: 'true' if no new commits exist since latest tag or bump is none
+    value: ${{ steps.calc.outputs.skip }}
   commits_count:
     description: Number of commits evaluated since the latest tag
+    value: ${{ steps.calc.outputs.commits_count }}
 
 runs:
   using: composite
   steps:
     - name: Calculate SemVer
+      id: calc
       shell: bash
       env:
         TARGET_PATH: ${{ inputs.path }}
