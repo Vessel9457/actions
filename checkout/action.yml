@@ -7,8 +7,13 @@ description: >-
 
 inputs:
   token:
-    description: Token used for HTTP basic auth (e.g. `${{ github.token }}`)
-    required: true
+    description: >-
+      Token used for HTTP basic auth. Defaults to the ambient `FORGEJO_TOKEN` /
+      `GITHUB_TOKEN`, which Forgejo exports into every step — so on Forgejo the
+      caller usually needs no `token:` at all. Pass it explicitly on GitHub,
+      where no token is in the environment.
+    required: false
+    default: ""
   repository:
     description: Repository to clone, as `owner/name`. Defaults to the calling repository.
     required: false
@@ -77,6 +82,14 @@ runs:
       run: |
         set -euo pipefail
 
+        # Forgejo exports the automatic token into every step's environment;
+        # GitHub does not, so there the caller passes `token:` explicitly.
+        TOKEN="${IN_TOKEN:-${FORGEJO_TOKEN:-${GITHUB_TOKEN:-}}}"
+        if [ -z "$TOKEN" ]; then
+          echo "::error::no token: pass \`token:\`, or run on Forgejo where FORGEJO_TOKEN is ambient"
+          exit 1
+        fi
+
         SERVER="${IN_SERVER_URL:-$GITHUB_SERVER_URL}"
         SERVER="${SERVER%/}"
         REPOSITORY="${IN_REPOSITORY:-$GITHUB_REPOSITORY}"
@@ -90,7 +103,7 @@ runs:
         # `https://` strip would leave the scheme in the host position.
         SCHEME="${SERVER%%://*}"
         REST="${SERVER#*://}"
-        AUTH_URL="${SCHEME}://oauth2:${IN_TOKEN}@${REST}/${REPOSITORY}.git"
+        AUTH_URL="${SCHEME}://oauth2:${TOKEN}@${REST}/${REPOSITORY}.git"
         CLEAN_URL="${SCHEME}://${REST}/${REPOSITORY}.git"
 
         # The runner's workspace can be owned by a different uid than the job.

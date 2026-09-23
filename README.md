@@ -178,7 +178,7 @@ without rebuilding the URL.
 
 | Input | Default | Description |
 |---|---|---|
-| `token` | — | Token for HTTP basic auth (**required**) |
+| `token` | ambient `FORGEJO_TOKEN` / `GITHUB_TOKEN` | Token for HTTP basic auth |
 | `repository` | caller's `GITHUB_REPOSITORY` | `owner/name` to clone |
 | `server_url` | `GITHUB_SERVER_URL` | Forgejo base URL; **its scheme is preserved** |
 | `ref` | remote default branch | Branch, tag, or SHA |
@@ -224,6 +224,31 @@ explicitly:
     server_url: https://${{ env.FJ_HOST }}
     ref: ${{ inputs.ref || 'main' }}
 ```
+
+## The automatic token
+
+Forgejo creates one token per workflow run and exports it into **every step's
+environment** as `FORGEJO_TOKEN`. It is also exposed as `forgejo.token`, and
+aliased for GitHub compatibility as `GITHUB_TOKEN` / `github.token` /
+`secrets.GITHUB_TOKEN`. Per the [Forgejo docs](https://forgejo.org/docs/latest/user/actions/basic-concepts/#automatic-token):
+
+- it is scoped to **this repository only** — use on any other repo, even to open
+  an issue, returns `404`;
+- it **has write permission** and can push commits, create tags, and merge PRs;
+- it is **write-capable even on `pull_request`** — except for fork PRs, where it
+  is read-only;
+- **no workflow is triggered as a side effect** of a change it authors. A commit
+  or tag pushed with it will *not* fire an `on: push` workflow, so a release
+  must dispatch its own follow-up explicitly.
+
+Two consequences for this repo:
+
+- `permissions:` in a `.forgejo/workflows/*.yaml` is **not a Forgejo key** — the
+  act `Workflow` struct has no such field, so it is silently ignored. The
+  automatic token is write-capable regardless.
+- Because the token is ambient, `checkout` falls back to it, so Forgejo callers
+  need not pass `token:` at all. GitHub runners export nothing, so the twin
+  passes `secrets.FORGEJO` explicitly.
 
 ## Secrets
 
