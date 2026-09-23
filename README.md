@@ -168,6 +168,63 @@ needed**. Calculates the next release version from Conventional Commits (`feat:`
     fallback_version: 0.1.0
 ```
 
+## `checkout`
+
+A composite action — plain shell + git, **no Node**. Replaces both
+`actions/checkout` (which needs Node, absent from the Alpine runner) and the
+hand-rolled `git clone` blocks. It retries transient clone failures, always
+fetches tags, and can leave the authenticated remote in place so later steps push
+without rebuilding the URL.
+
+| Input | Default | Description |
+|---|---|---|
+| `token` | — | Token for HTTP basic auth (**required**) |
+| `repository` | caller's `GITHUB_REPOSITORY` | `owner/name` to clone |
+| `server_url` | `GITHUB_SERVER_URL` | Forgejo base URL; **its scheme is preserved** |
+| `ref` | remote default branch | Branch, tag, or SHA |
+| `path` | `.` | Destination, relative to the workspace |
+| `fetch_depth` | `0` | Commits to fetch; `0` = full history (needed for tag-range versioning) |
+| `fetch_tags` | `true` | Fetch all tags after cloning |
+| `persist_credentials` | `false` | Keep the authenticated URL in `origin` so later steps can push |
+| `clean` | `true` | Empty the destination before cloning |
+| `retries` | `5` | Clone attempts before failing |
+
+| Output | Description |
+|---|---|
+| `sha` | Full commit SHA checked out |
+| `ref` | Branch name, exact tag when detached, else the SHA |
+| `path` | Destination directory |
+
+> **Never build the authenticated URL by stripping a hardcoded `https://`.** The
+> in-cluster `GITHUB_SERVER_URL` is plain `http://`, so that strip leaves the
+> scheme in the host position and git resolves the host as `http`. Split the
+> scheme off instead — this action does.
+
+### Forgejo caller
+
+```yaml
+- name: Checkout source
+  uses: https://git.delnegend.com/Delnegend/actions/checkout@v2
+  with:
+    token: ${{ github.token }}
+    persist_credentials: true # later steps push via `origin`
+```
+
+### GitHub twin — clone the Forgejo source
+
+The twin's own name differs only by owner, so pass the Forgejo `repository`
+explicitly:
+
+```yaml
+- name: Fetch source from Forgejo
+  uses: https://git.delnegend.com/Delnegend/actions/checkout@v2
+  with:
+    token: ${{ secrets.FORGEJO }}
+    repository: ${{ env.FJ_OWNER }}/${{ github.event.repository.name }}
+    server_url: https://${{ env.FJ_HOST }}
+    ref: ${{ inputs.ref || 'main' }}
+```
+
 ## Secrets
 
 | Repo | Secret | Value |

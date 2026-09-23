@@ -1,0 +1,159 @@
+name: checkout
+description: >-
+  Clone a Forgejo repository with token auth — composite shell + git, no Node,
+  no external action. Preserves the server URL scheme (the in-cluster URL is
+  plain http://), retries transient clone failures, and can keep the
+  authenticated remote so later steps can push.
+
+inputs:
+  token:
+    description: Token used for HTTP basic auth (e.g. `${{ github.token }}`)
+    required: true
+  repository:
+    description: Repository to clone, as `owner/name`. Defaults to the calling repository.
+    required: false
+    default: ""
+  server_url:
+    description: Forgejo base URL. Defaults to `GITHUB_SERVER_URL`; its scheme is preserved.
+    required: false
+    default: ""
+  ref:
+    description: Branch, tag, or SHA to check out. Defaults to the remote's default branch.
+    required: false
+    default: ""
+  path:
+    description: Destination directory, relative to the workspace. Use `.` for the workspace root.
+    required: false
+    default: .
+  fetch_depth:
+    description: Commits to fetch; `0` fetches full history (required for tag-range versioning).
+    required: false
+    default: "0"
+  fetch_tags:
+    description: Fetch all tags after cloning (needed by the `semver` action).
+    required: false
+    default: "true"
+  persist_credentials:
+    description: Keep the authenticated URL in `origin` so later steps can push without rebuilding it.
+    required: false
+    default: "false"
+  clean:
+    description: Delete the destination's existing contents before cloning.
+    required: false
+    default: "true"
+  retries:
+    description: Clone attempts before failing.
+    required: false
+    default: "5"
+
+outputs:
+  sha:
+    description: Full commit SHA that was checked out.
+    value: ${{ steps.clone.outputs.sha }}
+  ref:
+    description: Branch name, or the exact tag when detached, or the SHA otherwise.
+    value: ${{ steps.clone.outputs.ref }}
+  path:
+    description: Destination directory that was cloned into.
+    value: ${{ steps.clone.outputs.path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Clone
+      id: clone
+      shell: bash
+      env:
+        IN_TOKEN: ${{ inputs.token }}
+        IN_REPOSITORY: ${{ inputs.repository }}
+        IN_SERVER_URL: ${{ inputs.server_url }}
+        IN_REF: ${{ inputs.ref }}
+        IN_PATH: ${{ inputs.path }}
+        IN_FETCH_DEPTH: ${{ inputs.fetch_depth }}
+        IN_FETCH_TAGS: ${{ inputs.fetch_tags }}
+        IN_PERSIST_CREDENTIALS: ${{ inputs.persist_credentials }}
+        IN_CLEAN: ${{ inputs.clean }}
+        IN_RETRIES: ${{ inputs.retries }}
+      run: |
+        set -euo pipefail
+
+        SERVER="${IN_SERVER_URL:-$GITHUB_SERVER_URL}"
+        SERVER="${SERVER%/}"
+        REPOSITORY="${IN_REPOSITORY:-$GITHUB_REPOSITORY}"
+        TARGET="${IN_PATH:-.}"
+        REF="${IN_REF:-}"
+        DEPTH="${IN_FETCH_DEPTH:-0}"
+        RETRIES="${IN_RETRIES:-5}"
+
+        # Split the scheme off instead of stripping a hardcoded prefix: the
+        # in-cluster GITHUB_SERVER_URL is plain http://, so a fixed
+        # `https://` strip would leave the scheme in the host position.
+        SCHEME="${SERVER%%://*}"
+        REST="${SERVER#*://}"
+        AUTH_URL="${SCHEME}://oauth2:${IN_TOKEN}@${REST}/${REPOSITORY}.git"
+        CLEAN_URL="${SCHEME}://${REST}/${REPOSITORY}.git"
+
+        # The runner's workspace can be owned by a different uid than the job.
+        git config --global --add safe.directory "*"
+
+        empty_destination() {
+          if [ "$TARGET" = "." ]; then
+            find . -mindepth 1 -delete
+          else
+            rm -rf "$TARGET"
+            mkdir -p "$TARGET"
+          fi
+        }
+
+        if [ "${IN_CLEAN:-true}" = "true" ]; then
+          empty_destination
+        else
+          [ "$TARGET" = "." ] || mkdir -p "$TARGET"
+        fi
+
+        CLONE_ARGS=(--quiet)
+        if [ "$DEPTH" != "0" ]; then
+          CLONE_ARGS+=(--depth "$DEPTH")
+        fi
+
+        attempt=1
+        while true; do
+          if git clone "${CLONE_ARGS[@]}" "$AUTH_URL" "$TARGET"; then
+            break
+          fi
+          if [ "$attempt" -ge "$RETRIES" ]; then
+            echo "::error::git clone of ${REPOSITORY} failed after ${attempt} attempt(s)"
+            exit 1
+          fi
+          echo "git clone failed (attempt ${attempt}); retrying in $((attempt * 3))s..."
+          sleep $((attempt * 3))
+          attempt=$((attempt + 1))
+          empty_destination
+        done
+
+        if [ "${IN_FETCH_TAGS:-true}" = "true" ]; then
+          git -C "$TARGET" fetch --tags --force --quiet origin || true
+        fi
+
+        if [ -n "$REF" ]; then
+          git -C "$TARGET" fetch --quiet origin "$REF" 2>/dev/null || true
+          git -C "$TARGET" checkout --quiet "$REF"
+        fi
+
+        if [ "${IN_PERSIST_CREDENTIALS:-false}" != "true" ]; then
+          git -C "$TARGET" remote set-url origin "$CLEAN_URL"
+        fi
+
+        SHA="$(git -C "$TARGET" rev-parse HEAD)"
+        RESOLVED="$(git -C "$TARGET" rev-parse --abbrev-ref HEAD)"
+        if [ "$RESOLVED" = "HEAD" ]; then
+          RESOLVED="$(git -C "$TARGET" describe --tags --exact-match 2>/dev/null || echo "$SHA")"
+        fi
+
+        echo "checked out ${REPOSITORY} @ ${RESOLVED} (${SHA}) into ${TARGET}"
+
+        {
+          echo "sha=${SHA}"
+          echo "ref=${RESOLVED}"
+          echo "path=${TARGET}"
+        } >> "$GITHUB_OUTPUT"
