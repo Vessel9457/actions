@@ -26,6 +26,14 @@ inputs:
     description: Branch, tag, or SHA to check out. Defaults to the remote's default branch.
     required: false
     default: ""
+  fj_repo:
+    description: >-
+      Forgejo repo as `host/owner/name` (scheme optional, e.g.
+      `git.delnegend.com/Delnegend/emsui-agent`). Short for passing
+      `server_url` + `repository` separately; when set, those two inputs are
+      ignored.
+    required: false
+    default: ""
   path:
     description: Destination directory, relative to the workspace. Use `.` for the workspace root.
     required: false
@@ -70,6 +78,7 @@ runs:
       shell: bash
       env:
         IN_TOKEN: ${{ inputs.token }}
+        IN_FJ_REPO: ${{ inputs.fj_repo }}
         IN_REPOSITORY: ${{ inputs.repository }}
         IN_SERVER_URL: ${{ inputs.server_url }}
         IN_REF: ${{ inputs.ref }}
@@ -90,9 +99,16 @@ runs:
           exit 1
         fi
 
-        SERVER="${IN_SERVER_URL:-$GITHUB_SERVER_URL}"
+        # `fj_repo` (`host/owner/name`, scheme optional) wins over the split
+        # inputs: split `host` from `owner/name` on the first `/`.
+        if [ -n "${IN_FJ_REPO:-}" ]; then
+          FJ="${IN_FJ_REPO#*://}"
+          SERVER_OVERRIDE="https://${FJ%%/*}"
+          REPO_OVERRIDE="${FJ#*/}"
+        fi
+        SERVER="${SERVER_OVERRIDE:-${IN_SERVER_URL:-$GITHUB_SERVER_URL}}"
         SERVER="${SERVER%/}"
-        REPOSITORY="${IN_REPOSITORY:-$GITHUB_REPOSITORY}"
+        REPOSITORY="${REPO_OVERRIDE:-${IN_REPOSITORY:-$GITHUB_REPOSITORY}}"
         TARGET="${IN_PATH:-.}"
         REF="${IN_REF:-}"
         DEPTH="${IN_FETCH_DEPTH:-0}"
